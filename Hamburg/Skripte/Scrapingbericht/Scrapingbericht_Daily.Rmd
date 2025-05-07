@@ -178,12 +178,12 @@ scraping_matrix <- scraping_logs %>%
 kable(scraping_matrix, escape = FALSE, format = "html",
              table.attr = "style='margin-left: 0; margin-right: 0'") %>%
   column_spec(1, width = "100px", extra_css = "border-right: 2px solid #000; padding-left: 8px;
-              background-color: #f7f7f7; font-size: 13px;") %>% 
+              background-color: #f8f5f2; font-size: 13px;") %>% 
   column_spec(2:6, width = "100px",
-              extra_css = "background-color: #f7f7f7; font-size: 13px;") %>% 
+              extra_css = "background-color: #f8f5f2; font-size: 13px;") %>% 
   row_spec(1, extra_css = "border-top: 2px solid #000; padding-left: 8px; line-height: 1.5;") %>% 
   row_spec(2:nrow(scraping_matrix),
-           extra_css = "border-top: 2px solid #f7f7f7; padding-left: 8px; line-height: 1.5;") %>%
+           extra_css = "border-top: 2px solid #f8f5f2; padding-left: 8px; line-height: 1.5;") %>%
   kable_minimal(position = "left")
 
 

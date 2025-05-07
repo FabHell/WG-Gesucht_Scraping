@@ -69,7 +69,6 @@ Serververbindung(Mail_Inhalt, verbose = TRUE)
 ################################################################################
 
 
-
 ## FUNKTIONIERT IN DER FORM NOCH NICHT
 
 # library(taskscheduleR)
