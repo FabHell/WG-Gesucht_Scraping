@@ -1,0 +1,192 @@
+---
+title: Scraping WG-Gesucht
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = F, include = F, warning = F, message = F)
+
+library(tidyverse)
+library(knitr)
+library(kableExtra)
+library(here)
+
+```
+
+```{r Analysedaten}
+
+
+Daten_Hamburg <- read_csv("C:\\Users\\Fabian Hellmold\\Desktop\\WG-Gesucht-Scraper\\Hamburg\\Daten\\Analysedaten\\Analysedaten.csv",
+                          show_col_types = FALSE)
+
+
+```
+
+```{r Logdaten}
+
+
+parse_scraping_logs <- function(log_dir = "", date = "") {
+  pattern <- format(date, "%d.%m.%Y")
+  log_files <- list.files(log_dir, pattern = pattern, full.names = TRUE)
+  
+  if (length(log_files) == 0) {
+    Alarm = TRUE
+    stop("⚠️ Keine Logdateien gefunden für das Datum: ", pattern)
+  }
+  
+  result <- data.frame(
+    Loopzeit = character(),
+    Seite = integer(),
+    Ergebnis = character(),
+    stringsAsFactors = FALSE
+  )
+  
+  for (log_file in log_files) {
+    
+    # Lade Zeilen der Logdatei
+    log_lines <- readLines(log_file, warn = FALSE)
+    
+    # Extrahiere Uhrzeit aus Dateinamen
+    time_raw <- str_extract(basename(log_file), "\\{\\d+-\\d+\\}")
+    loop_time <- gsub("-", ":", gsub("[\\{\\}]", "", time_raw))
+    
+    for (i in seq_along(log_lines)) {
+      line <- log_lines[i]
+      
+      # Fall 1: Keine neuen Sublinks
+      if (grepl("keine neuen Sublinks", line, ignore.case = TRUE)) {
+        seite <- as.integer(str_match(line, "Seite\\s*(\\d+)")[, 2])
+        result <- rbind(result, data.frame(
+          Loopzeit = loop_time,
+          Seite = seite,
+          Ergebnis = "Keine neuen Anzeigen"
+        ))
+        
+        # Fall 2: Neue Links gefunden → nächster Print zeigt Ergebnis
+      } else if (grepl("Neue Links gefunden", line)) {
+        if ((i + 1) <= length(log_lines)) {
+          result_line <- log_lines[i + 1]
+          seite <- as.integer(str_match(result_line, "S\\.\\s*(\\d+)")[, 2])
+          
+          if (grepl("Kein Scraping", result_line)) {
+            result <- rbind(result, data.frame(
+              Loopzeit = loop_time,
+              Seite = seite,
+              Ergebnis = "Kein Scraping"
+            ))
+            
+          } else if (grepl("teilweise erfolgreich", result_line)) {
+            match <- str_match(result_line, "Erfolgreich (\\d+) / Fehlgeschlagen (\\d+)")
+            result <- rbind(result, data.frame(
+              Loopzeit = loop_time,
+              Seite = seite,
+              Ergebnis = paste0("TW Erfolgreich ", match[2], "/", match[3])
+            ))
+            
+          } else if (grepl("Scraping erfolgreich", result_line)) {
+            match <- str_match(result_line, "Scraping erfolgreich:\\s*(\\d+)\\s*Link\\(s\\) gescraped")
+            count <- as.integer(match[, 2])
+            result <- rbind(result, data.frame(
+              Loopzeit = loop_time,
+              Seite = seite,
+              Ergebnis = paste0("Erfolgreich ", count, " Links")
+            ))
+          }
+        }
+      }
+    }
+  }
+  
+  return(result)
+}
+
+
+scraping_logs <- parse_scraping_logs(
+  log_dir = "C:\\Users\\Fabian Hellmold\\Desktop\\WG-Gesucht-Scraper\\Hamburg\\Logs",
+  date = as.Date(Sys.Date())
+)
+
+
+```
+
+Automatischer Scrapingreport vom [`r format(Sys.time(), "%d.%m.%Y")`]{style="color: orange;"} für Anzeigen von WG-Zimmern in Hamburg <br>
+
+## Anzahl gescrapter Anzeigen
+
+-   Heute wurden **`r Daten_Hamburg %>% filter(Datum_Scraping == Sys.Date()) %>% nrow()`** Angebote gescrapt. Letzte Woche waren es am selben Wochentag **`r Daten_Hamburg %>% filter(Datum_Scraping == Sys.Date()-7) %>% nrow()`** Angebote. 
+
+
+```{r plot, include=TRUE, fig.height=2.5, fig.width=7}
+
+Daten_Hamburg %>%
+  filter(Datum_Scraping >= Sys.Date() - 7) %>%
+  group_by(Datum_Scraping) %>%
+  summarise(Anzahl = n()) %>%
+  mutate(Heute = Datum_Scraping == Sys.Date()) %>%
+  
+  ggplot(aes(x = Datum_Scraping, y = Anzahl, fill = Heute)) +
+    geom_col(show.legend = F) +
+    scale_fill_manual(values = c("FALSE" = "steelblue", "TRUE" = "tomato")) +
+    scale_x_date(date_breaks = "1 day", date_labels = "%a %d. %B") +
+    labs(
+    title = "",
+    x = "",
+    y = "") +
+  theme_minimal()
+  
+```
+
+## Report Scrapingloops
+
+Von den heutigen Scrapingzyklen mit neuen Links waren ...
+
+-   [**`r sum(str_detect(scraping_logs$Ergebnis, "^Erfolgreich \\d+ Links$"))`**]{style="color: green;"} der Scrapingloops vollständig erfolgreich.
+-   [**`r sum(str_detect(scraping_logs$Ergebnis, "^TW Erfolgreich \\d+/\\d+$"))`**]{style="color: orange;"} teilweise erfolgreich.
+-   bei [**`r sum(scraping_logs$Ergebnis == "Kein Scraping")`**]{style="color: red;"} der Loops keine Datenabfragen möglich.
+
+<div style="margin-bottom: 20px;"></div>
+
+```{r echo=FALSE, include = TRUE, results='asis', fig.width= 6}
+
+scraping_matrix <- scraping_logs %>%
+  mutate(
+    Loopzeit = paste0("Scraping ", Loopzeit),
+    Seite = paste0("Seite ", Seite),
+    Ergebnis = case_when(
+      grepl("^Erfolgreich \\d+ Links$", Ergebnis) ~ {
+        parts <- str_match(Ergebnis, "^(Erfolgreich) (\\d+ Links)$")
+        paste0("<span style=\"color:green;\">", parts[,2], "<br>", parts[,3], "</span>")
+      },
+      grepl("^TW Erfolgreich \\d+/\\d+$", Ergebnis) ~ {
+        parts <- str_match(Ergebnis, "^(TW Erfolgreich) (\\d+/\\d+)$")
+        paste0("<span style=\"color:orange;\">", parts[,2], "<br>", parts[,3], "</span>")
+      },
+      grepl("^Kein Scraping$", Ergebnis) ~ {
+        paste0("<span style=\"color:red;\">Kein<br>Scraping</span>")
+      },
+      grepl("^Keine neuen Anzeigen$", Ergebnis) ~ {
+        paste0("<span style=\"color:gray;\">Keine neuen<br>Anzeigen</span>")
+      },
+      TRUE ~ Ergebnis
+    )
+  ) %>%
+  pivot_wider(names_from = Seite, values_from = Ergebnis, values_fill = "-") %>%
+  arrange(Loopzeit)
+
+
+
+kable(scraping_matrix, escape = FALSE, format = "html",
+             table.attr = "style='margin-left: 0; margin-right: 0'") %>%
+  column_spec(1, width = "100px", extra_css = "border-right: 2px solid #000; padding-left: 8px;
+              background-color: #f7f7f7; font-size: 13px;") %>% 
+  column_spec(2:6, width = "100px",
+              extra_css = "background-color: #f7f7f7; font-size: 13px;") %>% 
+  row_spec(1, extra_css = "border-top: 2px solid #000; padding-left: 8px; line-height: 1.5;") %>% 
+  row_spec(2:nrow(scraping_matrix),
+           extra_css = "border-top: 2px solid #f7f7f7; padding-left: 8px; line-height: 1.5;") %>%
+  kable_minimal(position = "left")
+
+
+```
+
+<br>
