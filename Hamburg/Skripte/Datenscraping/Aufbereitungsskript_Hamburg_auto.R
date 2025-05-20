@@ -1,7 +1,6 @@
 
 
 
-
 ################################################################################
 ################################################################################
 #####                                                                      #####
@@ -11,9 +10,10 @@
 ################################################################################
 
 
-library(tidyverse)
-library(readxl)
 
+library(readxl)
+library(tidygeocoder)
+library(sf)
 
 
 
@@ -23,8 +23,6 @@ library(readxl)
 ###                                                                          ###
 ################################################################################
 
-
-## Bearbeiten Zusammensetzung
 
 
 Analysedaten_neu <- Rohdaten_neu_gefiltert %>%
@@ -140,7 +138,65 @@ Analysedaten_neu <- Rohdaten_neu_gefiltert %>%
          Freitext_Lage, Freitext_WG_Leben, Freitext_Sonstiges, Datum_Scraping)
 
 
-print("Bearbeitung der Sting-Variablen erfolgreich")
+message("Bearbeitung der Sting-Variablen erfolgreich")
+
+
+
+
+################################################################################
+###                                                                          ###
+###                         Geocoding der Stadtteile                         ###
+###                                                                          ###
+################################################################################
+
+
+
+## Geodaten laden --------------------------------------------------------------
+
+
+Geodaten_Stadtteile <- st_read("C:\\Users\\Fabian Hellmold\\Desktop\\WG-Gesucht-Scraper\\Hamburg\\Daten\\Geodaten\\Geo_Stadtteile\\Stadtteile_Hamburg.shp") %>%
+  filter(stadtteil_ != "Neuwerk") %>%
+  select(Stadtteil = stadtteil_)
+
+St_Teile <- tibble(Geodaten_Stadtteile) %>%
+  select(Stadtteil) %>%
+  pull()
+
+
+
+## Geocoding durchführen -------------------------------------------------------
+
+
+Geocoding_Stadtteile <- Analysedaten_neu %>%
+  filter(!(Stadtteil %in% St_Teile))  %>%
+  
+  mutate(country = "Deutschland",
+         city = "Hamburg") %>%
+  geocode(method = "osm", country = country, city = city,
+          postalcode = Postleitzahl, street = Straße) %>%
+  select(-Stadtteil, -country, -city) %>%
+  
+  st_as_sf(coords = c("long", "lat"), crs = 4326, na.fail = F) %>%
+  st_transform(crs = st_crs(Geodaten_Stadtteile)) %>%
+  st_join(Geodaten_Stadtteile) %>%
+  
+  mutate(Stadtteil_Quelle = case_when(!is.na(Stadtteil) ~ "Geocode_OSM")) %>%
+  tibble() %>% select(-geometry) 
+
+
+
+## Datensätze wieder verbinden -------------------------------------------------
+
+
+Analysedaten_neu_geo <- Analysedaten_neu %>%
+  filter(Stadtteil %in% St_Teile) %>%
+  mutate(Stadtteil_Quelle = "WG_Gesucht", .before = Postleitzahl) %>%
+  rbind(Geocoding_Stadtteile)
+
+
+print(" ")
+print(paste0(nrow(Geocoding_Stadtteile %>% filter(!is.na(Stadtteil))), " Stadtteile über Geocoding ermittelt"))
+print(paste0("Für ", nrow(Geocoding_Stadtteile %>% filter(is.na(Stadtteil))), " Anzeigen konnte kein Stadtteil ermittelt werden"))
 
 
 
@@ -157,22 +213,21 @@ print("Bearbeitung der Sting-Variablen erfolgreich")
 
 Analysedaten_gesamt <- read_csv("C:\\Users\\Fabian Hellmold\\Desktop\\WG-Gesucht-Scraper\\Hamburg\\Daten\\Analysedaten\\Analysedaten.csv",
                                 show_col_types = FALSE) %>%
-  rbind(Analysedaten_neu) 
+  rbind(Analysedaten_neu_geo) 
 
 
 write.csv(Analysedaten_gesamt, "C:\\Users\\Fabian Hellmold\\Desktop\\WG-Gesucht-Scraper\\Hamburg\\Daten\\Analysedaten\\Analysedaten.csv", 
           row.names = FALSE)
 
 
-
 ## Speichern Backups Analysedaten ----------------------------------------------
 
-write.csv(Analysedaten_neu, paste0("C:\\Users\\Fabian Hellmold\\Desktop\\WG-Gesucht-Scraper\\Hamburg\\Daten\\Backup\\Analysedaten\\Analysedaten ",
-                                   format(Sys.time(), "%d.%m.%Y {%H-%M}"), ".csv"), 
+write.csv(Analysedaten_neu_geo, paste0("C:\\Users\\Fabian Hellmold\\Desktop\\WG-Gesucht-Scraper\\Hamburg\\Daten\\Backup\\Analysedaten\\Analysedaten ",
+                                       format(Sys.time(), "%d.%m.%Y {%H-%M}"), ".csv"), 
           row.names = FALSE)
 
 
-print("Speichern der Analysedaten erfolgreich")
+message("Speichern der Analysedaten erfolgreich")
 
 
 

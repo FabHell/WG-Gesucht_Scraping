@@ -10,12 +10,10 @@
 ################################################################################
 
 
+
 library(tidyverse)
 library(rvest)
 library(httr)
-
-
-
 
 
 
@@ -48,6 +46,13 @@ Selektionslinks <- read_csv("C:\\Users\\Fabian Hellmold\\Desktop\\WG-Gesucht-Scr
 ## Leeren Datensatz erstellen
 
 Rohdaten_neu <- tibble()
+
+
+
+## Dateinamen festlegen
+
+rohdaten_filename <- paste0("Rohdaten ", format(Sys.time(), "%d.%m.%Y {%H-%M}"), ".csv")
+log_filename <- paste0("Scrapinglog ", format(Sys.time(), "%d.%m.%Y {%H-%M}"), ".txt")
 
 
 
@@ -162,8 +167,7 @@ Fun_Subdata = function(Link_Subdata) {
 ## Scrapinglog mit Ergebnissen speichern
 
 sink(
-  paste0("C:\\Users\\Fabian Hellmold\\Desktop\\WG-Gesucht-Scraper\\Hamburg\\Logs\\Scrapinglog ", format(Sys.time(), "%d.%m.%Y {%H-%M}"), ".txt"),
-  
+  paste0("C:\\Users\\Fabian Hellmold\\Desktop\\WG-Gesucht-Scraper\\Hamburg\\Logs\\", log_filename)
 )
 
 
@@ -256,7 +260,7 @@ for(Seite in seq(0, 4, 1)) {
 }  
 
 
-sink()
+
 
 
 
@@ -280,10 +284,10 @@ Rohdaten_neu_gefiltert <- Rohdaten_neu %>%
   filter(!(is.na(Titel)))
 
 
+
 ## Speichern des Backups für Rohdaten
 
-write.csv(Rohdaten_neu_gefiltert, paste0("C:\\Users\\Fabian Hellmold\\Desktop\\WG-Gesucht-Scraper\\Hamburg\\Daten\\Backup\\Rohdaten\\Rohdaten ",
-                                         format(Sys.time(), "%d.%m.%Y {%H-%M}"), ".csv"), 
+write.csv(Rohdaten_neu_gefiltert, paste0("C:\\Users\\Fabian Hellmold\\Desktop\\WG-Gesucht-Scraper\\Hamburg\\Daten\\Backup\\Rohdaten\\", rohdaten_filename), 
           row.names = FALSE)
 
 
@@ -316,13 +320,35 @@ write.csv(Rohdaten_gesamt, "C:\\Users\\Fabian Hellmold\\Desktop\\WG-Gesucht-Scra
 
 message("---------- DATENAUFBEREITUNG -----------")
 
-
-# Aufbereitungsskripte durchlaufen lassen
-
 source("C:\\Users\\Fabian Hellmold\\Desktop\\WG-Gesucht-Scraper\\Hamburg\\Skripte\\Datenscraping\\Aufbereitungsskript_Hamburg_auto.R")
-
 
 message(" ")
 
-beepr::beep(4)
+
+
+
+
+
+################################################################################
+#####                                                                      #####
+#####                       Daten in Cloud speichern                       #####
+#####                                                                      #####
+################################################################################
+
+
+write.csv(Rohdaten_neu_gefiltert, paste0("C:\\Users\\Fabian Hellmold\\Dropbox\\WG_Gesucht\\Hamburg\\Daten\\Backup Rohdaten\\", rohdaten_filename), 
+          row.names = FALSE)
+
+
+write.csv(Analysedaten_gesamt, "C:\\Users\\Fabian Hellmold\\Dropbox\\WG_Gesucht\\Hamburg\\Daten\\Analysedaten\\Analysedaten.csv", 
+          row.names = FALSE) %>%
+  rbind(Analysedaten_neu_geo) 
+
+
+file.copy(from = paste0("C:\\Users\\Fabian Hellmold\\Desktop\\WG-Gesucht-Scraper\\Hamburg\\Logs\\", log_filename), 
+          to = paste0("C:\\Users\\Fabian Hellmold\\Dropbox\\WG_Gesucht\\Hamburg\\Logs\\", log_filename), 
+          overwrite = TRUE)
+
+
+sink()
 
