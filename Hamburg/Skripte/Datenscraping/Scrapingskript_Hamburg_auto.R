@@ -52,6 +52,7 @@ Rohdaten_neu <- tibble()
 ## Dateinamen festlegen
 
 rohdaten_filename <- paste0("Rohdaten ", format(Sys.time(), "%d.%m.%Y {%H-%M}"), ".csv")
+analysedaten_filename <- paste0("Analysedaten ", format(Sys.time(), "%d.%m.%Y {%H-%M}"), ".csv")
 log_filename <- paste0("Scrapinglog ", format(Sys.time(), "%d.%m.%Y {%H-%M}"), ".txt")
 
 
@@ -190,7 +191,7 @@ for(Seite in seq(0, 4, 1)) {
   
   # Zusammensetzung der Links bestimmen und als html auslesen
   
-  link = paste0(Link_Stadt,Seite,".html")
+  link = paste0(Link_Stadt, Seite, ".html")
   Url <- read_html(GET(link, ua))
   
   
@@ -274,6 +275,7 @@ for(Seite in seq(0, 4, 1)) {
 
 if (nrow(Rohdaten_neu) == 0 || ncol(Rohdaten_neu) == 0) {
   print("KEINE NEUEN ANZEIGEN GESCRAPED")
+  sink()
   stop("Skript wird beendet")
 }
 
@@ -313,7 +315,7 @@ write.csv(Rohdaten_gesamt, "C:\\Users\\Fabian Hellmold\\Desktop\\WG-Gesucht-Scra
 
 ################################################################################
 #####                                                                      #####
-#####                          Datenaufbereitung                           #####
+#####                    Datenaufbereitung und Geocoding                   #####
 #####                                                                      #####
 ################################################################################
 
@@ -341,8 +343,7 @@ write.csv(Rohdaten_neu_gefiltert, paste0("C:\\Users\\Fabian Hellmold\\Dropbox\\W
 
 
 write.csv(Analysedaten_gesamt, "C:\\Users\\Fabian Hellmold\\Dropbox\\WG_Gesucht\\Hamburg\\Daten\\Analysedaten\\Analysedaten.csv", 
-          row.names = FALSE) %>%
-  rbind(Analysedaten_neu_geo) 
+          row.names = FALSE) 
 
 
 file.copy(from = paste0("C:\\Users\\Fabian Hellmold\\Desktop\\WG-Gesucht-Scraper\\Hamburg\\Logs\\", log_filename), 

@@ -115,6 +115,7 @@ Automatischer Scrapingreport vom [`r format(Sys.time(), "%d.%m.%Y")`]{style="col
 
 -   Heute wurden **`r Daten_Hamburg %>% filter(Datum_Scraping == Sys.Date()) %>% nrow()`** Angebote gescrapt. Letzte Woche waren es am selben Wochentag **`r Daten_Hamburg %>% filter(Datum_Scraping == Sys.Date()-7) %>% nrow()`** Angebote. 
 
+<div style="margin-bottom: -15px;"></div>
 
 ```{r plot, include=TRUE, fig.height=2.5, fig.width=7}
 
@@ -136,11 +137,12 @@ Daten_Hamburg %>%
   
 ```
 
-## Report Scrapingloops
+## Erfolg der Scrapingloops
 
 Von den heutigen Scrapingzyklen mit neuen Links waren ...
+<div style="margin-bottom: -10px;"></div>
 
--   [**`r sum(str_detect(scraping_logs$Ergebnis, "^Erfolgreich \\d+ Links$"))`**]{style="color: green;"} der Scrapingloops vollständig erfolgreich.
+-   [**`r sum(str_detect(scraping_logs$Ergebnis, "^Erfolgreich \\d+ Links$"))`**]{style="color: green;"} der Loops vollständig erfolgreich.
 -   [**`r sum(str_detect(scraping_logs$Ergebnis, "^TW Erfolgreich \\d+/\\d+$"))`**]{style="color: orange;"} teilweise erfolgreich.
 -   bei [**`r sum(scraping_logs$Ergebnis == "Kein Scraping")`**]{style="color: red;"} der Loops keine Datenabfragen möglich.
 
@@ -177,13 +179,13 @@ scraping_matrix <- scraping_logs %>%
 
 kable(scraping_matrix, escape = FALSE, format = "html",
              table.attr = "style='margin-left: 0; margin-right: 0'") %>%
-  column_spec(1, width = "100px", extra_css = "border-right: 2px solid #000; padding-left: 8px;
-              background-color: #f8f5f2; font-size: 13px;") %>% 
-  column_spec(2:6, width = "100px",
-              extra_css = "background-color: #f8f5f2; font-size: 13px;") %>% 
-  row_spec(1, extra_css = "border-top: 2px solid #000; padding-left: 8px; line-height: 1.5;") %>% 
+  column_spec(1, width = "80px", extra_css = "border-right: 2px solid #000; padding-left: 8px;
+              background-color: #f8f5f2; font-size: 11px;") %>% 
+  column_spec(2:6, width = "80px",
+              extra_css = "background-color: #f8f5f2; font-size: 11px;") %>% 
+  row_spec(1, extra_css = "border-top: 2px solid #000; padding-left: 8px; line-height: 1.35;") %>% 
   row_spec(2:nrow(scraping_matrix),
-           extra_css = "border-top: 2px solid #f8f5f2; padding-left: 8px; line-height: 1.5;") %>%
+           extra_css = "border-top: 2px solid #f8f5f2; padding-left: 8px; line-height: 1.35;") %>%
   kable_minimal(position = "left")
 
 

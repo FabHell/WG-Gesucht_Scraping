@@ -154,7 +154,7 @@ message("Bearbeitung der Sting-Variablen erfolgreich")
 ## Geodaten laden --------------------------------------------------------------
 
 
-Geodaten_Stadtteile <- st_read("C:\\Users\\Fabian Hellmold\\Desktop\\WG-Gesucht-Scraper\\Hamburg\\Daten\\Geodaten\\Geo_Stadtteile\\Stadtteile_Hamburg.shp") %>%
+Geodaten_Stadtteile <- st_read("C:\\Users\\Fabian Hellmold\\Desktop\\WG-Gesucht-Scraper\\Hamburg\\Daten\\Geodaten\\Geo_Stadtteile\\Stadtteile_Hamburg.shp", quiet = T) %>%
   filter(stadtteil_ != "Neuwerk") %>%
   select(Stadtteil = stadtteil_)
 
@@ -168,20 +168,22 @@ St_Teile <- tibble(Geodaten_Stadtteile) %>%
 
 
 Geocoding_Stadtteile <- Analysedaten_neu %>%
-  filter(!(Stadtteil %in% St_Teile))  %>%
-  
-  mutate(country = "Deutschland",
-         city = "Hamburg") %>%
-  geocode(method = "osm", country = country, city = city,
-          postalcode = Postleitzahl, street = Straße) %>%
-  select(-Stadtteil, -country, -city) %>%
-  
-  st_as_sf(coords = c("long", "lat"), crs = 4326, na.fail = F) %>%
-  st_transform(crs = st_crs(Geodaten_Stadtteile)) %>%
-  st_join(Geodaten_Stadtteile) %>%
-  
-  mutate(Stadtteil_Quelle = case_when(!is.na(Stadtteil) ~ "Geocode_OSM")) %>%
-  tibble() %>% select(-geometry) 
+  filter(!(Stadtteil %in% St_Teile))
+
+if (nrow(Geocoding_Stadtteile) > 0) {
+  Geocoding_Stadtteile <- Geocoding_Stadtteile %>%
+    mutate(country = "Deutschland",
+           city = "Hamburg") %>%
+    geocode(method = "osm", country = country, city = city,
+            postalcode = Postleitzahl, street = Straße) %>%
+    select(-Stadtteil, -country, -city) %>%
+    st_as_sf(coords = c("long", "lat"), crs = 4326, na.fail = FALSE) %>%
+    st_transform(crs = st_crs(Geodaten_Stadtteile)) %>%
+    st_join(Geodaten_Stadtteile) %>%
+    mutate(Stadtteil_Quelle = case_when(!is.na(Stadtteil) ~ "Geocode_OSM")) %>%
+    as.data.frame() %>%
+    select(-geometry)
+}
 
 
 
@@ -190,7 +192,7 @@ Geocoding_Stadtteile <- Analysedaten_neu %>%
 
 Analysedaten_neu_geo <- Analysedaten_neu %>%
   filter(Stadtteil %in% St_Teile) %>%
-  mutate(Stadtteil_Quelle = "WG_Gesucht", .before = Postleitzahl) %>%
+  mutate(Stadtteil_Quelle = "WG_Gesucht", .after = Stadtteil) %>%
   rbind(Geocoding_Stadtteile)
 
 
@@ -222,8 +224,7 @@ write.csv(Analysedaten_gesamt, "C:\\Users\\Fabian Hellmold\\Desktop\\WG-Gesucht-
 
 ## Speichern Backups Analysedaten ----------------------------------------------
 
-write.csv(Analysedaten_neu_geo, paste0("C:\\Users\\Fabian Hellmold\\Desktop\\WG-Gesucht-Scraper\\Hamburg\\Daten\\Backup\\Analysedaten\\Analysedaten ",
-                                       format(Sys.time(), "%d.%m.%Y {%H-%M}"), ".csv"), 
+write.csv(Analysedaten_neu_geo, paste0("C:\\Users\\Fabian Hellmold\\Desktop\\WG-Gesucht-Scraper\\Hamburg\\Daten\\Backup\\Analysedaten\\", analysedaten_filename), 
           row.names = FALSE)
 
 

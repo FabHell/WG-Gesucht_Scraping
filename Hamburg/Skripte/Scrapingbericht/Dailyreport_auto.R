@@ -37,7 +37,7 @@ html_inhalt <- readLines(Pfad_HTML, warn = FALSE) %>% paste(collapse = "\n")
 Mail_Inhalt <- envelope(
   from = "fabian.hellmold@posteo.de",
   to = "fabian.hellmold@posteo.de",
-  subject = "Scrapingreport Hamburg"
+  subject = "Daily Report Hamburg"
 ) %>%
   html(html_inhalt)
 
@@ -77,8 +77,8 @@ Serververbindung(Mail_Inhalt, verbose = TRUE)
 # taskscheduler_create(
 #   taskname = "Scrapingbericht_Daily_Test2",
 #   rscript = "Hamburg/Skripte/Scrapingbericht/Dailyreport_auto.R",
-#   file.path(Sys.getenv("R_HOME"), "bin", "Rscript.exe"),
-#   starttime = "22:15",
+#   Rexe = "C:\\Program Files\\R\\R-4.5.0\\bin\\Rscript.exe",
+#   starttime = "17:42",
 #   startdate = format(Sys.Date(), "%d/%m/%Y"),
 #   schedule = "DAILY"
 # )

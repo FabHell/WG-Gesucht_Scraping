@@ -47,3 +47,9 @@ po/*~
 
 # RStudio Connect folder
 rsconnect/
+
+
+# Selber Hinzugefügt
+Hamburg/Logs/
+Hamburg/Daten/
+Hamburg/Ergebnisse/

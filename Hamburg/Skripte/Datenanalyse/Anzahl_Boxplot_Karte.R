@@ -68,7 +68,7 @@ Daten_Boxplot <- Daten_Hamburg %>%
 
 
 Offset <- -61      # Entfernung Bars und Boxplots 
-Mulitplik <- 1.0   # Länge der Bars
+Mulitplik <- 0.2   # Länge der Bars
 
 Daten_Crossbar <- Daten_Boxplot %>%
   mutate(xmin = min(Daten_Hamburg$Gesamtmiete, na.rm = T) + Offset,
