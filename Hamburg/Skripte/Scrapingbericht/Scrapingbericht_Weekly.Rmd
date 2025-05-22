@@ -10,6 +10,7 @@ knitr::opts_chunk$set(echo = F, include = F, warning = F, message = F)
 
 library(tidyverse)
 library(patchwork)
+library(ggtext)
 library(sf)
 
 ```
@@ -164,12 +165,12 @@ Daten_Hamburg %>%
 ```
 
 
-## Performance der Scrapingloops
+## Ergebnis der Scrapingloops
 
-Von den Scrapingzyklen diese Woche mit neuen Links waren ...
+-   Die meisten Wohnungsangebote wurden in dieser Woche um **[`r all_logs %>% mutate(Links_gescraped = case_when(grepl("^Erfolgreich (\\d+) Links$", Ergebnis) ~ as.integer(str_match(Ergebnis, "^Erfolgreich (\\d+) Links$")[, 2]), grepl("^TW Erfolgreich (\\d+)/(\\d+)$", Ergebnis) ~ as.integer(str_match(Ergebnis, "^TW Erfolgreich (\\d+)/(\\d+)$")[, 2]), TRUE ~ 0)) %>%group_by(Loopzeit) %>%summarize(Sum = sum(Links_gescraped, na.rm = TRUE)) %>%slice_max(Sum, n = 1) %>% pull(Loopzeit)`]{style="color: #766e63;"}** Uhr gescraped; die<br>wenigsten um **[`r all_logs %>% mutate(Links_gescraped = case_when(grepl("^Erfolgreich (\\d+) Links$", Ergebnis) ~ as.integer(str_match(Ergebnis, "^Erfolgreich (\\d+) Links$")[, 2]), grepl("^TW Erfolgreich (\\d+)/(\\d+)$", Ergebnis) ~ as.integer(str_match(Ergebnis, "^TW Erfolgreich (\\d+)/(\\d+)$")[, 2]), TRUE ~ 0)) %>%group_by(Loopzeit) %>%summarize(Sum = sum(Links_gescraped, na.rm = TRUE)) %>%slice_min(Sum, n = 1) %>% pull(Loopzeit)`]{style="color: #766e63;"}** Uhr.
+-  Vollständig erfolgreiche Scrapingloops traten um [**`r all_logs %>% mutate(colour = case_when(grepl("Erfolgreich \\d+ Links", Ergebnis) ~ "0", grepl("TW Erfolgreich", Ergebnis) ~ "1", Ergebnis == "Kein Scraping" ~ "2", Ergebnis == "Keine neuen Anzeigen" ~ "3")) %>% group_by(Loopzeit, colour) %>% summarise(count = n(), .groups = "drop") %>% filter(colour == 0) %>% slice_max(count, n = 1) %>% pull(Loopzeit)`**]{style="color: green;"} Uhr am häufigsten auf. Um [**`r all_logs %>% mutate(colour = case_when(grepl("Erfolgreich \\d+ Links", Ergebnis) ~ "0", grepl("TW Erfolgreich", Ergebnis) ~ "1", Ergebnis == "Kein Scraping" ~ "2", Ergebnis == "Keine neuen Anzeigen" ~ "3")) %>% group_by(Loopzeit, colour) %>% summarise(count = n(), .groups = "drop") %>% filter(colour == 2) %>% slice_max(count, n = 1) %>% pull(Loopzeit)`**]{style="color: red;"}<br>Uhr scheiteren trotz neuer Links die meisten Scrapingloops.
+-  Von den Scrapingzyklen mit neuen Links waren [**`r sum(str_detect(all_logs$Ergebnis, "^Erfolgreich \\d+ Links$"))`**]{style="color: green;"} Loops vollständig erfolgreich, [**`r sum(str_detect(all_logs$Ergebnis, "^TW Erfolgreich \\d+/\\d+$"))`**]{style="color: orange;"} teilweise<br>erfolgreich und bei [**`r sum(all_logs$Ergebnis == "Kein Scraping")`**]{style="color: red;"} der Loops keine Datenabfragen möglich.
 
--   ... [**`r sum(str_detect(all_logs$Ergebnis, "^Erfolgreich \\d+ Links$"))`**]{style="color: green;"} der Loops vollständig erfolgreich, [**`r sum(str_detect(all_logs$Ergebnis, "^TW Erfolgreich \\d+/\\d+$"))`**]{style="color: orange;"} teilweise erfolgreich und bei [**`r sum(all_logs$Ergebnis == "Kein Scraping")`**]{style="color: red;"} der Loops keine<br>Datenabfragen möglich.
--   Noch eine Aussage zu dem **[braunen Histogram]{style="color: #a0896f;"}**
 
 ```{r plot2, include=TRUE, fig.height=4, fig.width=7}
 
@@ -196,24 +197,52 @@ Abb_1 <- all_logs %>%
   summarise(Links_gescraped = sum(Links_gescraped)) %>% 
 
   ggplot(aes(x = Seite, y = Links_gescraped)) +
-  geom_col(fill = "#a0896f", color = "#ffffff") +
+  geom_col(fill = "#766e63", color = "#ffffff") +
   facet_wrap(~Loopzeit, nrow = 1) +
   geom_label(data = Label, 
              aes(x = Inf, y = Inf, label = Sum), 
              hjust = 1, vjust = 1, inherit.aes = FALSE, 
-             color = "#594e45", size = 3,
-             fill = "#f8f5f2",        
+             color = "#766e63", size = 3,
+             fill = "white",        
              label.size = 0) + 
-  scale_y_continuous(breaks = c(5,10,15,20,25)) +
+  scale_y_continuous(breaks = c(5,15,25)) +
   labs(x = NULL, y = NULL, title = NULL) +
   theme_minimal() +
   theme(
     axis.text.x = element_blank(),
     strip.text = element_blank())
 
-
-
 Abb_2 <- all_logs %>%
+  mutate(colour = case_when(
+    grepl("Erfolgreich \\d+ Links", Ergebnis) ~ "0",
+    grepl("TW Erfolgreich", Ergebnis) ~ "1",
+    Ergebnis == "Kein Scraping" ~ "2",
+    Ergebnis == "Keine neuen Anzeigen" ~ "3"
+  )) %>%
+  group_by(Loopzeit, colour) %>%
+  summarise(count = n(), .groups = "drop") %>%
+  mutate(colour = factor(colour),
+         y_label = "Kategorien") %>%
+
+ggplot(aes(x = colour, y = y_label, fill = colour)) +
+  geom_tile(color = "black", width = 0.9, height = 0.9, show.legend = FALSE) +
+  geom_text(aes(label = count), color = "black", size = 2.5) +
+  scale_fill_manual(values = c("0" = "#84b884", "1" = "#f1a765",
+                               "2" = "#d97c7c", "3" = "#cfcfcf")) +
+  facet_wrap(~ Loopzeit, nrow = 1) +
+  labs(title = NULL, x = NULL, y = NULL, fill = NULL) +
+  theme_minimal() +
+  theme(
+    axis.text = element_blank(),
+    axis.ticks = element_blank(),
+    panel.grid = element_blank(),
+    axis.text.y = element_textbox(
+      size = 9.5, face = "bold", fill = "#f8f5f2", linetype = 1, linewidth = 0.2,
+      box.color = "black", padding = margin(2, 4, 1, 4), margin = margin(r = -2)),
+    strip.text = element_blank()
+  )
+
+Abb_3 <- all_logs %>%
   mutate(colour = case_when(
     grepl("Erfolgreich \\d+ Links", Ergebnis) ~ 0,
     grepl("TW Erfolgreich", Ergebnis) ~ 1,
@@ -249,8 +278,8 @@ ggplot(aes(x = Seite, y = 1, fill = as.factor(colour))) +
   )
 
 
-Abb_1 + Abb_2  +
-  plot_layout(ncol = 1, heights = c(0.4, 1))
+Abb_1 + Abb_2  + Abb_3 +
+  plot_layout(ncol = 1, heights = c(0.4, 0.1, 1))
 
 
 ```

@@ -57,18 +57,12 @@ log_filename <- paste0("Scrapinglog ", format(Sys.time(), "%d.%m.%Y {%H-%M}"), "
 
 
 
-## Spoofing User Agent
-
-ua <- user_agent("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.36")
-
-
-
 ## Funktion für die einzelnen Variablen der Subdaten schreiben
 
 
 Fun_Subdata = function(Link_Subdata) {
   
-  WG_Angebot <- read_html(GET(Link_Subdata, ua))
+  WG_Angebot <- read_html(GET(Link_Subdata, proxy_obj, ua_obj))
   
   
   Titel <- WG_Angebot %>%
@@ -157,6 +151,29 @@ Fun_Subdata = function(Link_Subdata) {
 
 
 
+################################################################################
+#####                                                                      #####
+#####                          Proxyserver laden                           #####
+#####                                                                      #####
+################################################################################
+
+
+sink(
+  paste0("C:\\Users\\Fabian Hellmold\\Desktop\\WG-Gesucht-Scraper\\Hamburg\\Logs\\", log_filename)
+)
+
+print(paste0("--- Scrapinglog ", format(Sys.time(), "%d.%m.%Y {%H-%M}"), " ---"))
+print("")
+
+
+message("--------- PROXYSERVER AUSWÄHLEN ---------")
+
+source("C:\\Users\\Fabian Hellmold\\Desktop\\WG-Gesucht-Scraper\\Hamburg\\Skripte\\Datenscraping\\Proxyzugang_Hamburg_auto.R")
+
+message(" ")
+
+
+
 
 ################################################################################
 #####                                                                      #####
@@ -165,16 +182,6 @@ Fun_Subdata = function(Link_Subdata) {
 ################################################################################
 
 
-## Scrapinglog mit Ergebnissen speichern
-
-sink(
-  paste0("C:\\Users\\Fabian Hellmold\\Desktop\\WG-Gesucht-Scraper\\Hamburg\\Logs\\", log_filename)
-)
-
-
-print(paste0("--- Scrapinglog ", format(Sys.time(), "%d.%m.%Y {%H-%M}"), " ---"))
-print("")
-
 message(" ")
 message("---------- BEGINNE SCRAPING ------------")
 message(" ")
@@ -182,22 +189,12 @@ message(" ")
 
 for(Seite in seq(0, 4, 1)) {
   
-  
-  # Verzögerung der Seitenabfrage einbauen:
-  
   Sys.sleep(5)
   
   message(paste0("------------ Starte Loop ",Seite + 1, " -------------"))
   
-  # Zusammensetzung der Links bestimmen und als html auslesen
-  
-  link = paste0(Link_Stadt, Seite, ".html")
-  Url <- read_html(GET(link, ua))
-  
-  
-  
-  
-  # Linksammlung Subdaten und aussortieren bereits gescrapter Links
+  link <- paste0(Link_Stadt, Seite, ".html")
+  Url <- read_html(GET(link, proxy_obj, ua_obj))
   
   Sublinks <- Url %>%
     html_nodes(".offer_list_item .truncate_title a") %>%
@@ -206,16 +203,11 @@ for(Seite in seq(0, 4, 1)) {
     setdiff(Selektionslinks)
   
   
-  
-  
-  ## Prüfen, ob neue Links generiert wurden
-  
   if (length(Sublinks) > 0) {
     
     print(paste0("Neue Links gefunden | Seite: ", Seite + 1))
     
     WG_Subdaten <- sapply(Sublinks, Fun_Subdata)
-    
     
     Rohdaten_neu <- rbind(Rohdaten_neu, 
                           tibble(Link = as.vector(Sublinks),
@@ -233,35 +225,28 @@ for(Seite in seq(0, 4, 1)) {
                                  Freitext_Sonstiges = WG_Subdaten[12,],
                                  Datum_Scraping = Sys.Date()))
     
-    
     print({
-      zeile <- replace(WG_Subdaten[1, ], is.na(WG_Subdaten[1, ]), "")
       
-      if (all(zeile == "")) {
+      if (all(is.na(WG_Subdaten[1, ]))) {
         paste0("S. ", Seite + 1, " | Kein Scraping")
         
-      } else if (any(zeile == "")) {
+      } else if (any(is.na(WG_Subdaten[1, ]))) {
         paste0("S. ", Seite + 1, " | Scraping teilweise erfolgreich: Erfolgreich ", 
-               sum(zeile != ""), " / Fehlgeschlagen ", sum(zeile == ""))
+               sum(!is.na(WG_Subdaten[1, ])), " / Fehlgeschlagen ", sum(is.na(WG_Subdaten[1, ])))
         
       } else {
-        paste0("S. ", Seite + 1, " | Scraping erfolgreich: ", length(zeile), 
+        paste0("S. ", Seite + 1, " | Scraping erfolgreich: ", length(WG_Subdaten[1, ]), 
                " Link(s) gescraped.")
       }
     })
-    
     
   } else {
     print(paste0("Keine neuen Sublinks | Seite ", Seite + 1))
   }
   
-  
   print(" ")
   
 }  
-
-
-
 
 
 
@@ -273,18 +258,20 @@ for(Seite in seq(0, 4, 1)) {
 ################################################################################
 
 
-if (nrow(Rohdaten_neu) == 0 || ncol(Rohdaten_neu) == 0) {
-  print("KEINE NEUEN ANZEIGEN GESCRAPED")
-  sink()
-  stop("Skript wird beendet")
-}
-
-
 ## Nicht vollständig gescrapte Fälle entfernen
 
 Rohdaten_neu_gefiltert <- Rohdaten_neu %>%
   filter(!(is.na(Titel)))
 
+
+ 
+## Skript beenden wenn keine neuen Fälle gescraped wurden
+
+if (nrow(Rohdaten_neu_gefiltert) == 0 || ncol(Rohdaten_neu_gefiltert) == 0) {
+  print("KEINE NEUEN ANZEIGEN GESCRAPED")
+  sink()
+  stop("Skript wird beendet")
+}
 
 
 ## Speichern des Backups für Rohdaten
@@ -300,7 +287,6 @@ Rohdaten_gesamt <- read_csv("C:\\Users\\Fabian Hellmold\\Desktop\\WG-Gesucht-Scr
                             show_col_types = FALSE) %>%
   rbind(Rohdaten_neu_gefiltert)  # %>%
 #  distinct(Link, .keep_all = TRUE)
-
 
 
 
