@@ -198,7 +198,7 @@ Analysedaten_neu_geo <- Analysedaten_neu %>%
 
 print(" ")
 print(paste0(nrow(Geocoding_Stadtteile %>% filter(!is.na(Stadtteil))), " Stadtteil(e) über Geocoding ermittelt"))
-print(paste0("Für ", nrow(Geocoding_Stadtteile %>% filter(is.na(Stadtteil))), " Anzeige(n) konnte kein Stadtteil ermittelt werden"))
+print(paste0("Für ", nrow(Geocoding_Stadtteile %>% filter(is.na(Stadtteil))), " Anzeige(n) wurde kein Stadtteil ermittelt"))
 
 
 

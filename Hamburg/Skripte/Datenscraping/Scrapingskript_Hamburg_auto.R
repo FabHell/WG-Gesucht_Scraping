@@ -182,71 +182,76 @@ message(" ")
 ################################################################################
 
 
-message(" ")
-message("---------- BEGINNE SCRAPING ------------")
-message(" ")
-
-
-for(Seite in seq(0, 4, 1)) {
+for (Seite in seq(0, 4, 1)) {
   
   Sys.sleep(5)
   
-  message(paste0("------------ Starte Loop ",Seite + 1, " -------------"))
+  message(paste0("------------ Starte Loop ", Seite + 1, " -------------"))
   
-  link <- paste0(Link_Stadt, Seite, ".html")
-  Url <- read_html(GET(link, proxy_obj, ua_obj))
-  
-  Sublinks <- Url %>%
-    html_nodes(".offer_list_item .truncate_title a") %>%
-    html_attr("href") %>%
-    paste0("https://www.wg-gesucht.de", .) %>%
-    setdiff(Selektionslinks)
-  
-  
-  if (length(Sublinks) > 0) {
+  tryCatch({
     
-    print(paste0("Neue Links gefunden | Seite: ", Seite + 1))
+    link <- paste0(Link_Stadt, Seite, ".html")
+    Url <- read_html(GET(link, proxy_obj, ua_obj))
     
-    WG_Subdaten <- sapply(Sublinks, Fun_Subdata)
+    Sublinks <- Url %>%
+      html_nodes(".offer_list_item .truncate_title a") %>%
+      html_attr("href") %>%
+      paste0("https://www.wg-gesucht.de", .) %>%
+      setdiff(Selektionslinks)
     
-    Rohdaten_neu <- rbind(Rohdaten_neu, 
-                          tibble(Link = as.vector(Sublinks),
-                                 Titel = WG_Subdaten[1,], 
-                                 WG_Konstellation = WG_Subdaten[2,],
-                                 Zimmergröße_Gesamtmiete = WG_Subdaten[3,], 
-                                 Adresse = WG_Subdaten[4,], 
-                                 Datum = WG_Subdaten[5,], 
-                                 WG_Details = WG_Subdaten[6,],
-                                 Kostenfeld = WG_Subdaten[7,],
-                                 Angaben_zum_Objekt = WG_Subdaten[8,],
-                                 Freitext_Zimmer = WG_Subdaten[9,],
-                                 Freitext_Lage = WG_Subdaten[10,],
-                                 Freitext_WG_Leben = WG_Subdaten[11,],
-                                 Freitext_Sonstiges = WG_Subdaten[12,],
-                                 Datum_Scraping = Sys.Date()))
-    
-    print({
+    if (length(Sublinks) > 0) {
       
-      if (all(is.na(WG_Subdaten[1, ]))) {
-        paste0("S. ", Seite + 1, " | Kein Scraping")
-        
-      } else if (any(is.na(WG_Subdaten[1, ]))) {
-        paste0("S. ", Seite + 1, " | Scraping teilweise erfolgreich: Erfolgreich ", 
-               sum(!is.na(WG_Subdaten[1, ])), " / Fehlgeschlagen ", sum(is.na(WG_Subdaten[1, ])))
-        
-      } else {
-        paste0("S. ", Seite + 1, " | Scraping erfolgreich: ", length(WG_Subdaten[1, ]), 
-               " Link(s) gescraped.")
-      }
-    })
+      print(paste0("Neue Links gefunden | Seite: ", Seite + 1))
+      
+      WG_Subdaten <- sapply(Sublinks, Fun_Subdata)
+      
+      Rohdaten_neu <- rbind(Rohdaten_neu, 
+                            tibble(Link = as.vector(Sublinks),
+                                   Titel = WG_Subdaten[1,], 
+                                   WG_Konstellation = WG_Subdaten[2,],
+                                   Zimmergröße_Gesamtmiete = WG_Subdaten[3,], 
+                                   Adresse = WG_Subdaten[4,], 
+                                   Datum = WG_Subdaten[5,], 
+                                   WG_Details = WG_Subdaten[6,],
+                                   Kostenfeld = WG_Subdaten[7,],
+                                   Angaben_zum_Objekt = WG_Subdaten[8,],
+                                   Freitext_Zimmer = WG_Subdaten[9,],
+                                   Freitext_Lage = WG_Subdaten[10,],
+                                   Freitext_WG_Leben = WG_Subdaten[11,],
+                                   Freitext_Sonstiges = WG_Subdaten[12,],
+                                   Datum_Scraping = Sys.Date()))
+      
+      print({
+        if (all(is.na(WG_Subdaten[1, ]))) {
+          paste0("S. ", Seite + 1, " | Kein Scraping")
+          
+        } else if (any(is.na(WG_Subdaten[1, ]))) {
+          paste0("S. ", Seite + 1, " | Scraping teilweise erfolgreich: Erfolgreich ", 
+                 sum(!is.na(WG_Subdaten[1, ])), " / Fehlgeschlagen ", sum(is.na(WG_Subdaten[1, ])))
+          
+        } else {
+          paste0("S. ", Seite + 1, " | Scraping erfolgreich: ", length(WG_Subdaten[1, ]), 
+                 " Link(s) gescraped.")
+        }
+      })
+      
+    } else {
+      print(paste0("Keine neuen Sublinks | Seite ", Seite + 1))
+    }
     
-  } else {
-    print(paste0("Keine neuen Sublinks | Seite ", Seite + 1))
-  }
-  
-  print(" ")
-  
-}  
+    print(" ")
+    
+  }, error = function(e) {
+    print(paste0("FEHLER SEITE ", Seite + 1, ": ", e$message))
+    print(" ")
+  })
+}
+
+
+## Nicht vollständig gescrapte Fälle entfernen
+
+Rohdaten_neu_gefiltert <- Rohdaten_neu %>%
+  filter(!(is.na(Titel)))
 
 
 
@@ -258,29 +263,15 @@ for(Seite in seq(0, 4, 1)) {
 ################################################################################
 
 
-## Nicht vollständig gescrapte Fälle entfernen
+if (nrow(Rohdaten_neu_gefiltert) > 0 || ncol(Rohdaten_neu_gefiltert) > 0) {
 
-Rohdaten_neu_gefiltert <- Rohdaten_neu %>%
-  filter(!(is.na(Titel)))
-
-
- 
-## Skript beenden wenn keine neuen Fälle gescraped wurden
-
-if (nrow(Rohdaten_neu_gefiltert) == 0 || ncol(Rohdaten_neu_gefiltert) == 0) {
-  print("KEINE NEUEN ANZEIGEN GESCRAPED")
-  sink()
-  stop("Skript wird beendet")
-}
-
-
+  
 ## Speichern des Backups für Rohdaten
 
 write.csv(Rohdaten_neu_gefiltert, paste0("C:\\Users\\Fabian Hellmold\\Desktop\\WG-Gesucht-Scraper\\Hamburg\\Daten\\Backup\\Rohdaten\\", rohdaten_filename), 
           row.names = FALSE)
 
-
-
+  
 ## Neue Daten mit altem Datensatz verbinden 
 
 Rohdaten_gesamt <- read_csv("C:\\Users\\Fabian Hellmold\\Desktop\\WG-Gesucht-Scraper\\Hamburg\\Daten\\Rohdaten\\Rohdaten.csv",
@@ -289,13 +280,12 @@ Rohdaten_gesamt <- read_csv("C:\\Users\\Fabian Hellmold\\Desktop\\WG-Gesucht-Scr
 #  distinct(Link, .keep_all = TRUE)
 
 
-
 ## Alten Datensatz mit neuem Überschreiben 
 
 write.csv(Rohdaten_gesamt, "C:\\Users\\Fabian Hellmold\\Desktop\\WG-Gesucht-Scraper\\Hamburg\\Daten\\Rohdaten\\Rohdaten.csv", row.names = FALSE)
 
-
-
+print(" ")
+print("Rohdaten erfolgreich gespeichert")
 
 
 
@@ -312,8 +302,8 @@ source("C:\\Users\\Fabian Hellmold\\Desktop\\WG-Gesucht-Scraper\\Hamburg\\Skript
 
 message(" ")
 
-
-
+print(" ")
+print("Analysedaten erfolgreich gespeichert")
 
 
 
@@ -332,10 +322,27 @@ write.csv(Analysedaten_gesamt, "C:\\Users\\Fabian Hellmold\\Dropbox\\WG_Gesucht\
           row.names = FALSE) 
 
 
-file.copy(from = paste0("C:\\Users\\Fabian Hellmold\\Desktop\\WG-Gesucht-Scraper\\Hamburg\\Logs\\", log_filename), 
-          to = paste0("C:\\Users\\Fabian Hellmold\\Dropbox\\WG_Gesucht\\Hamburg\\Logs\\", log_filename), 
-          overwrite = TRUE)
+
+
+} else {
+  
+  print(" ")
+  print("Keine neuen Daten gescraped")
+  
+} 
+
+
+
+################################################################################
+#####                                                                      #####
+#####                            Log speichern                             #####
+#####                                                                      #####
+################################################################################
 
 
 sink()
+
+file.copy(from = paste0("C:\\Users\\Fabian Hellmold\\Desktop\\WG-Gesucht-Scraper\\Kassel\\Logs\\", log_filename), 
+          to = paste0("C:\\Users\\Fabian Hellmold\\Dropbox\\WG_Gesucht\\Kassel\\Logs\\", log_filename), 
+          overwrite = TRUE)
 
