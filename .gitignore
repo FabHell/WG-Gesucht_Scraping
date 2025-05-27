@@ -50,10 +50,13 @@ rsconnect/
 
 
 # Selber Hinzugefügt
-Kassel/
 Stadtdummy/
 Hamburg/Logs/
 Hamburg/Daten/
 Hamburg/Ergebnisse/
+Kassel/Logs/
+Log_Test/
+Kassel/Daten/
+Kassel/Ergebnisse/
 *.Rproj
 *.html

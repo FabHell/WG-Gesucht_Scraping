@@ -17,6 +17,7 @@ library(httr)
 
 
 
+
 ################################################################################
 #####                                                                      #####
 #####                        VORBEREITUNG DES LOOPS                        #####
@@ -149,6 +150,12 @@ Fun_Subdata = function(Link_Subdata) {
 }
 
 
+sink(paste0("C:\\Users\\Fabian Hellmold\\Desktop\\WG-Gesucht-Scraper\\Hamburg\\Logs\\", log_filename))
+
+print(paste0("--- Scrapinglog ", format(Sys.time(), "%d.%m.%Y {%H-%M}"), " ---"))
+print("")
+
+
 
 
 ################################################################################
@@ -156,14 +163,6 @@ Fun_Subdata = function(Link_Subdata) {
 #####                          Proxyserver laden                           #####
 #####                                                                      #####
 ################################################################################
-
-
-sink(
-  paste0("C:\\Users\\Fabian Hellmold\\Desktop\\WG-Gesucht-Scraper\\Hamburg\\Logs\\", log_filename)
-)
-
-print(paste0("--- Scrapinglog ", format(Sys.time(), "%d.%m.%Y {%H-%M}"), " ---"))
-print("")
 
 
 message("--------- PROXYSERVER AUSWÄHLEN ---------")
@@ -289,6 +288,7 @@ print("Rohdaten erfolgreich gespeichert")
 
 
 
+
 ################################################################################
 #####                                                                      #####
 #####                    Datenaufbereitung und Geocoding                   #####
@@ -307,6 +307,7 @@ print("Analysedaten erfolgreich gespeichert")
 
 
 
+
 ################################################################################
 #####                                                                      #####
 #####                       Daten in Cloud speichern                       #####
@@ -322,14 +323,13 @@ write.csv(Analysedaten_gesamt, "C:\\Users\\Fabian Hellmold\\Dropbox\\WG_Gesucht\
           row.names = FALSE) 
 
 
-
-
 } else {
   
   print(" ")
   print("Keine neuen Daten gescraped")
   
 } 
+
 
 
 
@@ -342,7 +342,7 @@ write.csv(Analysedaten_gesamt, "C:\\Users\\Fabian Hellmold\\Dropbox\\WG_Gesucht\
 
 sink()
 
-file.copy(from = paste0("C:\\Users\\Fabian Hellmold\\Desktop\\WG-Gesucht-Scraper\\Kassel\\Logs\\", log_filename), 
-          to = paste0("C:\\Users\\Fabian Hellmold\\Dropbox\\WG_Gesucht\\Kassel\\Logs\\", log_filename), 
+file.copy(from = paste0("C:\\Users\\Fabian Hellmold\\Desktop\\WG-Gesucht-Scraper\\Hamburg\\Logs\\", log_filename), 
+          to = paste0("C:\\Users\\Fabian Hellmold\\Dropbox\\WG_Gesucht\\Hamburg\\Logs\\", log_filename), 
           overwrite = TRUE)
 
