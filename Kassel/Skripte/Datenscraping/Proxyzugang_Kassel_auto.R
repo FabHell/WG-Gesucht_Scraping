@@ -13,9 +13,10 @@
 
 library(httr)
 library(tidyverse)
+library(futile.logger)
 
 
-flog.info("== START PROXY-SETUP ====================")
+flog.info("== START PROXY-SETUP ========================")
 
 
 ## Aktuelle Proxyliste von Webshare laden und User-Agent erstellen -------------
@@ -39,7 +40,8 @@ proxy_df <- API_response %>%
   content("text", encoding = "UTF-8") %>%
   read.csv(text = ., header = FALSE, stringsAsFactors = FALSE) %>%
   setNames("proxy_string") %>%
-  separate(proxy_string, into = c("ip", "port", "user", "password"), sep = ":", remove = TRUE)
+  separate(proxy_string, into = c("ip", "port", "user", "password"), 
+           sep = ":", remove = TRUE)
 
 
 
@@ -58,29 +60,29 @@ test_proxy <- function(ip, port, user, password) {
 }
 
 proxy_tested <- proxy_df %>%
-  mutate(works = pmap_lgl(list(ip, port, user, password), test_proxy))
+  mutate(works = pmap_lgl(list(ip, port, user, password), test_proxy)) %>%
+  filter(works)
 
 if (sum(proxy_tested$works) > 0) {
   flog.info("%d von %d Proxys funktionsfähig", sum(proxy_tested$works), nrow(proxy_tested))
 } else {
   flog.error("Keine funktionierenden Proxys ermittelt")
-  stop("Abbruch: Keine funktionierenden Proxys.") 
+  stop("Abbruch: Keine funktionierenden Proxys") 
 }
 
 
-## Zufälligen funktionierenden Proxy auswählen ----------------------------------
+## Zufälligen funktionierenden Proxy auswählen ---------------------------------
 
-working_proxy <- proxy_tested %>%
-  filter(works) %>%
-  slice_sample(n = 1)
+proxy_obj <- proxy_tested %>%
+  slice_sample(n = 1) %>%
+  { use_proxy(url = .$ip,
+              port = as.numeric(.$port),
+              username = .$user,
+              password = .$password)
+  }
 
-proxy_obj <- use_proxy(
-  url = working_proxy$ip,
-  port = as.numeric(working_proxy$port),
-  username = working_proxy$user,
-  password = working_proxy$password)
-
-flog.info("Verwende Proxy: %s:%s", working_proxy$ip, working_proxy$port)
-flog.info("== ENDE PROXY-SETUP =====================")
+flog.info("Startproxy: %s:%s", 
+          proxy_obj[["options"]][["proxy"]], 
+          proxy_obj[["options"]][["proxyport"]])
+flog.info("== ENDE PROXY-SETUP =========================")
 flog.info(" ")  
-

@@ -16,9 +16,6 @@ library(tidygeocoder)
 library(sf)
 
 
-flog.info("== START DATENAUFBEREITUNG ==============")
-
-
 ################################################################################
 ###                                                                          ###
 ###                       AUFBEREITUNG STRINGVARIABLEN                       ###
@@ -191,9 +188,9 @@ if (nrow(Geocoding_Stadtteile) > 0) {
       as.data.frame() %>%
       select(-geometry)   
     
-    flog.info("%d Stadtteil(e) über Geocoding ermittelt.",
+    flog.info("%d Stadtteil(e) über Geocoding ermittelt",
               nrow(Geocoding_Stadtteile %>% filter(!is.na(Stadtteil))))
-    flog.info("Für %d Anzeige(n) wurde kein Stadtteil ermittelt.",
+    flog.info("%d Anzeige(n) ohne gültige Stadtteilangabe",
               nrow(Geocoding_Stadtteile %>% filter(is.na(Stadtteil))))
     
   }, error = function(e) {
@@ -241,7 +238,8 @@ write.csv(Analysedaten_neu_geo, paste0("C:\\Users\\Fabian Hellmold\\Desktop\\WG-
 
 
 flog.info("Speichern der Analysedaten erfolgreich")
-flog.info("== ENDE DATENAUFBEREITUNG ===============")
+flog.info("== ENDE DATENARBEIT =========================")
+
 flog.info(" ")
 
 
