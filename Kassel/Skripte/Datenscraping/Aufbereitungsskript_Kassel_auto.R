@@ -197,7 +197,7 @@ if (nrow(Geocoding_Stadtteile) > 0) {
     flog.error("Fehler beim Geocoding: %s", e$message)   
   })
 } else {
-  flog.info("Stadtteildaten vollständig: Kein Geocoding notwendig")
+  flog.info("Stadtteildaten vollständig: Kein Geocoding")
 }
 
 

@@ -27,7 +27,7 @@ library(httr)
 
 dual_appender <- function(line) {
   appender.console()(line)
-  appender.file(paste0("C:\\Users\\Fabian Hellmold\\Desktop\\WG-Gesucht-Scraper\\Log_Test\\Log_Kassel ",format(Sys.time(), "%d.%m.%Y {%H}"),".txt"))(line)
+  appender.file(paste0("C:\\Users\\Fabian Hellmold\\Desktop\\WG-Gesucht-Scraper\\Kassel\\Logs\\Log_Kassel ",format(Sys.time(), "%d.%m.%Y {%H}"),".txt"))(line)
 }
 
 flog.layout(layout.format("~l [~t] ~m")) 
@@ -327,7 +327,7 @@ for (Seite in seq(0, 1, 1)) {
       }
       
     } else {
-      flog.info("S.%d | DL1 / Keine neuen Sublinks", Seite + 1)
+      flog.info("S.%d | DL1 / Keine neuen Links", Seite + 1)
     }
     
     flog.info("S.%d | DL1 / ERFOLGREICH", Seite + 1)
@@ -335,6 +335,10 @@ for (Seite in seq(0, 1, 1)) {
   }, error = function(e1) {
     
     flog.warn("S.%d | DL1 / Fehler: %s", Seite + 1, e1$message)
+    
+    flog.info("S.%d | DL1 / Proxy: %s:%s", 
+              Seite+1, proxy_obj[["options"]][["proxy"]], 
+              proxy_obj[["options"]][["proxyport"]])   
     
     tryCatch({
       
@@ -464,7 +468,7 @@ for (Seite in seq(0, 1, 1)) {
         }
         
       } else {
-        flog.info("S.%d | DL2 / Keine neuen Sublinks", Seite + 1)
+        flog.info("S.%d | DL2 / Keine neuen Links", Seite + 1)
       }
       
       flog.info("S.%d | DL2 / ERFOLGREICH", Seite + 1)
@@ -472,6 +476,9 @@ for (Seite in seq(0, 1, 1)) {
     }, error = function(e2) {
       
       flog.warn("S.%d | DL2 / Fehler: %s", Seite + 1, e2$message)
+      flog.info("S.%d | DL2 / Proxy: %s:%s", 
+                Seite+1, proxy_obj[["options"]][["proxy"]], 
+                proxy_obj[["options"]][["proxyport"]])   
       flog.error("S.%d | DL1+2 / KEINE DATEN", Seite + 1)
       
     })
@@ -560,8 +567,14 @@ flog.info("######### ABSCHLUSS SCRAPING KASSEL #########")
   
 
 
-file.copy(from = paste0("C:\\Users\\Fabian Hellmold\\Desktop\\WG-Gesucht-Scraper\\Log_Test\\Log_Kassel ",format(Sys.time(), "%d.%m.%Y {%H}"),".txt"), 
+
+################################################################################
+#####                                                                      #####
+#####                            Log speichern                             #####
+#####                                                                      #####
+################################################################################
+
+
+file.copy(from = paste0("C:\\Users\\Fabian Hellmold\\Desktop\\WG-Gesucht-Scraper\\Kassel\\Logs\\Log_Kassel ",format(Sys.time(), "%d.%m.%Y {%H}"),".txt"), 
           to = paste0("C:\\Users\\Fabian Hellmold\\Dropbox\\WG_Gesucht\\Kassel\\Logs\\Log_Kassel ",format(Sys.time(), "%d.%m.%Y {%H}"),".txt"),
           overwrite = TRUE)
-
-

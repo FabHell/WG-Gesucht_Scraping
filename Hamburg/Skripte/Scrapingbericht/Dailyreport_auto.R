@@ -16,7 +16,7 @@ library(tidyverse)
 
 ## Pfade definieren ------------------------------------------------------------
 
-Pfad_Rmd <- "C:\\Users\\Fabian Hellmold\\Desktop\\WG-Gesucht-Scraper\\Hamburg\\Skripte\\Scrapingbericht\\Scrapingbericht_Daily.Rmd"
+Pfad_Rmd <- "C:\\Users\\Fabian Hellmold\\Desktop\\WG-Gesucht-Scraper\\Hamburg\\Skripte\\Scrapingbericht\\Scrapingbericht_Daily_multi.Rmd"
 Pfad_HTML <- tempfile(fileext = ".html")  # temporäre HTML-Datei für Mailinhalt
 
 

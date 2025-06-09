@@ -4,17 +4,16 @@
 ################################################################################
 ################################################################################
 #####                                                                      #####
-#####              AUFBEREITUNG VON WG-GESUCHT HAMBURG - AUTO              #####
+#####               AUFBEREITUNG VON WG-GESUCHT HAMBURG - AUTO             #####
 #####                                                                      #####
 ################################################################################
 ################################################################################
 
 
 
-library(readxl)
+library(tidyverse)
 library(tidygeocoder)
 library(sf)
-
 
 
 ################################################################################
@@ -127,18 +126,22 @@ Analysedaten_neu <- Rohdaten_neu_gefiltert %>%
   select(-Kostenfeld) %>%
   
   
-  mutate(Angaben_zum_Objekt = str_squish(str_replace_all(Angaben_zum_Objekt, "\\s+", " "))) %>%
+  mutate(Angaben_zum_Objekt = str_squish(str_replace_all(Angaben_zum_Objekt, "\\s+", " ")),
+         Freitext_Zimmer = str_squish(str_replace_all(Freitext_Zimmer, "\\s+", " ")),
+         Freitext_Lage = str_squish(str_replace_all(Freitext_Lage, "\\s+", " ")),
+         Freitext_WG_Leben = str_squish(str_replace_all(Freitext_WG_Leben, "\\s+", " ")),
+         Freitext_Sonstiges = str_squish(str_replace_all(Freitext_Sonstiges, "\\s+", " "))) %>%
   
   
   select(Titel, Link, Stadtteil, Postleitzahl, Straße, Gesamtmiete, Kaltmiete, Nebenkosten,
          Kaution, Sonstige_Kosten, Ablösevereinbarung, Zimmergröße, Personenzahl,
          Wohnungsgröße, Bewohneralter, Einzugsdatum, Zusammensetzung,
          Befristung_Enddatum, Befristungsdauer, Geschlecht_ges, Alter_ges, Wg_Art, 
-         Rauchen, Sprache, Angaben_zum_Objekt, Freitext_Zimmer, 
-         Freitext_Lage, Freitext_WG_Leben, Freitext_Sonstiges, Datum_Scraping)
+         Rauchen, Sprache, Angaben_zum_Objekt, Freitext_Zimmer, Freitext_Lage, 
+         Freitext_WG_Leben, Freitext_Sonstiges, Datum_Scraping)
 
 
-message("Bearbeitung der Sting-Variablen erfolgreich")
+flog.info("Bearbeitung der Sting-Variablen erfolgreich")
 
 
 
@@ -171,18 +174,31 @@ Geocoding_Stadtteile <- Analysedaten_neu %>%
   filter(!(Stadtteil %in% St_Teile))
 
 if (nrow(Geocoding_Stadtteile) > 0) {
-  Geocoding_Stadtteile <- Geocoding_Stadtteile %>%
-    mutate(country = "Deutschland",
-           city = "Hamburg") %>%
-    geocode(method = "osm", country = country, city = city,
-            postalcode = Postleitzahl, street = Straße) %>%
-    select(-Stadtteil, -country, -city) %>%
-    st_as_sf(coords = c("long", "lat"), crs = 4326, na.fail = FALSE) %>%
-    st_transform(crs = st_crs(Geodaten_Stadtteile)) %>%
-    st_join(Geodaten_Stadtteile) %>%
-    mutate(Stadtteil_Quelle = case_when(!is.na(Stadtteil) ~ "Geocode_OSM")) %>%
-    as.data.frame() %>%
-    select(-geometry)
+  
+  tryCatch({
+    Geocoding_Stadtteile <- Geocoding_Stadtteile %>%
+      mutate(country = "Deutschland",
+             city = "Hamburg") %>%
+      geocode(method = "osm", country = country, city = city,
+              postalcode = Postleitzahl, street = Straße) %>%
+      select(-Stadtteil, -country, -city) %>%
+      st_as_sf(coords = c("long", "lat"), crs = 4326, na.fail = FALSE) %>%
+      st_transform(crs = st_crs(Geodaten_Stadtteile)) %>%
+      st_join(Geodaten_Stadtteile) %>%
+      mutate(Stadtteil_Quelle = case_when(!is.na(Stadtteil) ~ "Geocode_OSM")) %>%
+      as.data.frame() %>%
+      select(-geometry)   
+    
+    flog.info("%d Stadtteil(e) über Geocoding ermittelt",
+              nrow(Geocoding_Stadtteile %>% filter(!is.na(Stadtteil))))
+    flog.info("%d Anzeige(n) ohne gültige Stadtteilangabe",
+              nrow(Geocoding_Stadtteile %>% filter(is.na(Stadtteil))))
+    
+  }, error = function(e) {
+    flog.error("Fehler beim Geocoding: %s", e$message)   
+  })
+} else {
+  flog.info("Stadtteildaten vollständig: Kein Geocoding")
 }
 
 
@@ -192,14 +208,8 @@ if (nrow(Geocoding_Stadtteile) > 0) {
 
 Analysedaten_neu_geo <- Analysedaten_neu %>%
   filter(Stadtteil %in% St_Teile) %>%
-  mutate(Stadtteil_Quelle = "WG_Gesucht", .after = Stadtteil) %>%
+  mutate(Stadtteil_Quelle = "WG_Gesucht", .before = Stadtteil) %>%
   rbind(Geocoding_Stadtteile)
-
-
-print(" ")
-print(paste0(nrow(Geocoding_Stadtteile %>% filter(!is.na(Stadtteil))), " Stadtteil(e) über Geocoding ermittelt"))
-print(paste0("Für ", nrow(Geocoding_Stadtteile %>% filter(is.na(Stadtteil))), " Anzeige(n) wurde kein Stadtteil ermittelt"))
-
 
 
 
@@ -228,7 +238,11 @@ write.csv(Analysedaten_neu_geo, paste0("C:\\Users\\Fabian Hellmold\\Desktop\\WG-
           row.names = FALSE)
 
 
-message("Speichern der Analysedaten erfolgreich")
+
+flog.info("Speichern der Analysedaten erfolgreich")
+flog.info("== ENDE DATENARBEIT =========================")
+
+flog.info(" ")
 
 
 

@@ -10,10 +10,32 @@
 ################################################################################
 
 
-
 library(tidyverse)
+library(futile.logger)
 library(rvest)
 library(httr)
+
+
+
+
+################################################################################
+#####                                                                      #####
+#####                         VORBEREITUNG DER LOGS                        #####
+#####                                                                      #####
+################################################################################
+
+
+dual_appender <- function(line) {
+  appender.console()(line)
+  appender.file(paste0("C:\\Users\\Fabian Hellmold\\Desktop\\WG-Gesucht-Scraper\\Hamburg\\Logs\\Log_Hamburg ",format(Sys.time(), "%d.%m.%Y {%H}"),".txt"))(line)
+}
+
+flog.layout(layout.format("~l [~t] ~m")) 
+flog.appender(dual_appender)
+
+
+flog.info("########## BEGINN SCRAPING HAMBURG ##########")
+flog.info("")
 
 
 
@@ -54,7 +76,6 @@ Rohdaten_neu <- tibble()
 
 rohdaten_filename <- paste0("Rohdaten ", format(Sys.time(), "%d.%m.%Y {%H-%M}"), ".csv")
 analysedaten_filename <- paste0("Analysedaten ", format(Sys.time(), "%d.%m.%Y {%H-%M}"), ".csv")
-log_filename <- paste0("Scrapinglog ", format(Sys.time(), "%d.%m.%Y {%H-%M}"), ".txt")
 
 
 
@@ -150,12 +171,6 @@ Fun_Subdata = function(Link_Subdata) {
 }
 
 
-sink(paste0("C:\\Users\\Fabian Hellmold\\Desktop\\WG-Gesucht-Scraper\\Hamburg\\Logs\\", log_filename))
-
-print(paste0("--- Scrapinglog ", format(Sys.time(), "%d.%m.%Y {%H-%M}"), " ---"))
-print("")
-
-
 
 
 ################################################################################
@@ -165,11 +180,7 @@ print("")
 ################################################################################
 
 
-message("--------- PROXYSERVER AUSWÄHLEN ---------")
-
 source("C:\\Users\\Fabian Hellmold\\Desktop\\WG-Gesucht-Scraper\\Hamburg\\Skripte\\Datenscraping\\Proxyzugang_Hamburg_auto.R")
-
-message(" ")
 
 
 
@@ -181,11 +192,14 @@ message(" ")
 ################################################################################
 
 
+flog.info("== BEGINN DATENSCRAPING =====================")
+
+
 for (Seite in seq(0, 4, 1)) {
   
   Sys.sleep(5)
   
-  message(paste0("------------ Starte Loop ", Seite + 1, " -------------"))
+  flog.info("--------------- Starte Loop %d ---------------", Seite + 1)
   
   tryCatch({
     
@@ -200,7 +214,15 @@ for (Seite in seq(0, 4, 1)) {
     
     if (length(Sublinks) > 0) {
       
-      print(paste0("Neue Links gefunden | Seite: ", Seite + 1))
+      flog.info("S.%d | DL1 / %d neue(r) Link(s) gefunden",  Seite + 1, length(Sublinks))
+      
+      proxy_obj <- proxy_tested %>%
+        slice_sample(n = 1) %>%
+        { use_proxy(url = .$ip,
+                    port = as.numeric(.$port),
+                    username = .$user,
+                    password = .$password)
+        }
       
       WG_Subdaten <- sapply(Sublinks, Fun_Subdata)
       
@@ -220,37 +242,252 @@ for (Seite in seq(0, 4, 1)) {
                                    Freitext_Sonstiges = WG_Subdaten[12,],
                                    Datum_Scraping = Sys.Date()))
       
-      print({
-        if (all(is.na(WG_Subdaten[1, ]))) {
-          paste0("S. ", Seite + 1, " | Kein Scraping")
-          
-        } else if (any(is.na(WG_Subdaten[1, ]))) {
-          paste0("S. ", Seite + 1, " | Scraping teilweise erfolgreich: Erfolgreich ", 
-                 sum(!is.na(WG_Subdaten[1, ])), " / Fehlgeschlagen ", sum(is.na(WG_Subdaten[1, ])))
-          
-        } else {
-          paste0("S. ", Seite + 1, " | Scraping erfolgreich: ", length(WG_Subdaten[1, ]), 
-                 " Link(s) gescraped.")
-        }
-      })
+      if (all(is.na(Rohdaten_neu[,1]))) {
+        
+        flog.warn("S.%d | DL1 / Kein Scraping", Seite + 1)
+        
+        proxy_obj <- proxy_tested %>%
+          slice_sample(n = 1) %>%
+          { use_proxy(url = .$ip,
+                      port = as.numeric(.$port),
+                      username = .$user,
+                      password = .$password)
+          }
+        
+        WG_Subdaten <- sapply(Sublinks, Fun_Subdata)
+        
+        Rohdaten_neu <- rbind(Rohdaten_neu, 
+                              tibble(Link = as.vector(Sublinks),
+                                     Titel = WG_Subdaten[1,], 
+                                     WG_Konstellation = WG_Subdaten[2,],
+                                     Zimmergröße_Gesamtmiete = WG_Subdaten[3,], 
+                                     Adresse = WG_Subdaten[4,], 
+                                     Datum = WG_Subdaten[5,], 
+                                     WG_Details = WG_Subdaten[6,],
+                                     Kostenfeld = WG_Subdaten[7,],
+                                     Angaben_zum_Objekt = WG_Subdaten[8,],
+                                     Freitext_Zimmer = WG_Subdaten[9,],
+                                     Freitext_Lage = WG_Subdaten[10,],
+                                     Freitext_WG_Leben = WG_Subdaten[11,],
+                                     Freitext_Sonstiges = WG_Subdaten[12,],
+                                     Datum_Scraping = Sys.Date()))
+        
+        flog.info("Hier noch Feedback zur Wiederholung")
+        
+      } else if (any(is.na(Rohdaten_neu[,1]))) {
+        
+        flog.warn("S.%d | DL1 / Scraping tw erfolgreich: E%d F%d",
+                  Seite + 1, sum(!is.na(Rohdaten_neu[,1])),
+                  sum(is.na(Rohdaten_neu[,1])))
+        
+        Sublinks <- Rohdaten_neu %>% filter(is.na(Titel)) %>% select(Link) %>% pull()
+        
+        proxy_obj <- proxy_tested %>%
+          slice_sample(n = 1) %>%
+          { use_proxy(url = .$ip,
+                      port = as.numeric(.$port),
+                      username = .$user,
+                      password = .$password)
+          }
+        
+        WG_Subdaten <- sapply(Sublinks, Fun_Subdata)
+        
+        Rohdaten_neu <- rbind(Rohdaten_neu, 
+                              tibble(Link = as.vector(Sublinks),
+                                     Titel = WG_Subdaten[1,], 
+                                     WG_Konstellation = WG_Subdaten[2,],
+                                     Zimmergröße_Gesamtmiete = WG_Subdaten[3,], 
+                                     Adresse = WG_Subdaten[4,], 
+                                     Datum = WG_Subdaten[5,], 
+                                     WG_Details = WG_Subdaten[6,],
+                                     Kostenfeld = WG_Subdaten[7,],
+                                     Angaben_zum_Objekt = WG_Subdaten[8,],
+                                     Freitext_Zimmer = WG_Subdaten[9,],
+                                     Freitext_Lage = WG_Subdaten[10,],
+                                     Freitext_WG_Leben = WG_Subdaten[11,],
+                                     Freitext_Sonstiges = WG_Subdaten[12,],
+                                     Datum_Scraping = Sys.Date()))
+        
+        flog.info("S.%d | DL1 / Proxy: %s:%s", 
+                  Seite+1, proxy_obj[["options"]][["proxy"]], 
+                  proxy_obj[["options"]][["proxyport"]])
+        
+      } else {
+        
+        flog.info("S.%d | DL1 / Scraping erfolgreich: %d Link(s)",
+                  Seite + 1, length(WG_Subdaten[1, ]))
+        
+        flog.info("S.%d | DL1 / Proxy: %s:%s", 
+                  Seite+1, proxy_obj[["options"]][["proxy"]], 
+                  proxy_obj[["options"]][["proxyport"]])        
+      }
       
     } else {
-      print(paste0("Keine neuen Sublinks | Seite ", Seite + 1))
+      flog.info("S.%d | DL1 / Keine neuen Links", Seite + 1)
     }
     
-    print(" ")
+    flog.info("S.%d | DL1 / ERFOLGREICH", Seite + 1)
     
-  }, error = function(e) {
-    print(paste0("FEHLER SEITE ", Seite + 1, ": ", e$message))
-    print(" ")
+  }, error = function(e1) {
+    
+    flog.warn("S.%d | DL1 / Fehler: %s", Seite + 1, e1$message)
+    flog.info("S.%d | DL1 / Proxy: %s:%s", 
+              Seite+1, proxy_obj[["options"]][["proxy"]], 
+              proxy_obj[["options"]][["proxyport"]])   
+    
+    tryCatch({
+      
+      Sys.sleep(30)
+      
+      link <<- paste0(Link_Stadt, Seite, ".html")
+      Url <<- read_html(GET(link, proxy_obj, ua_obj))
+      
+      Sublinks <<- Url %>%
+        html_nodes(".offer_list_item .truncate_title a") %>%
+        html_attr("href") %>%
+        paste0("https://www.wg-gesucht.de", .) %>%
+        setdiff(Selektionslinks) 
+      
+      if (length(Sublinks) > 0) {
+        
+        flog.info("S.%d | DL2 / %d neue(r) Link(s) gefunden",  Seite + 1, length(Sublinks))
+        
+        proxy_obj <<- proxy_tested %>%
+          slice_sample(n = 1) %>%
+          { use_proxy(url = .$ip,
+                      port = as.numeric(.$port),
+                      username = .$user,
+                      password = .$password)
+          }
+        
+        WG_Subdaten <<- sapply(Sublinks, Fun_Subdata)
+        
+        Rohdaten_neu <<- rbind(Rohdaten_neu, 
+                               tibble(Link = as.vector(Sublinks),
+                                      Titel = WG_Subdaten[1,], 
+                                      WG_Konstellation = WG_Subdaten[2,],
+                                      Zimmergröße_Gesamtmiete = WG_Subdaten[3,], 
+                                      Adresse = WG_Subdaten[4,], 
+                                      Datum = WG_Subdaten[5,], 
+                                      WG_Details = WG_Subdaten[6,],
+                                      Kostenfeld = WG_Subdaten[7,],
+                                      Angaben_zum_Objekt = WG_Subdaten[8,],
+                                      Freitext_Zimmer = WG_Subdaten[9,],
+                                      Freitext_Lage = WG_Subdaten[10,],
+                                      Freitext_WG_Leben = WG_Subdaten[11,],
+                                      Freitext_Sonstiges = WG_Subdaten[12,],
+                                      Datum_Scraping = Sys.Date()))
+        
+        if (all(is.na(Rohdaten_neu[,1]))) {
+          
+          flog.warn("S.%d | DL2 / Kein Scraping", Seite + 1)
+          
+          proxy_obj <<- proxy_tested %>%
+            slice_sample(n = 1) %>%
+            { use_proxy(url = .$ip,
+                        port = as.numeric(.$port),
+                        username = .$user,
+                        password = .$password)
+            }
+          
+          WG_Subdaten <<- sapply(Sublinks, Fun_Subdata)
+          
+          Rohdaten_neu <<- rbind(Rohdaten_neu, 
+                                 tibble(Link = as.vector(Sublinks),
+                                        Titel = WG_Subdaten[1,], 
+                                        WG_Konstellation = WG_Subdaten[2,],
+                                        Zimmergröße_Gesamtmiete = WG_Subdaten[3,], 
+                                        Adresse = WG_Subdaten[4,], 
+                                        Datum = WG_Subdaten[5,], 
+                                        WG_Details = WG_Subdaten[6,],
+                                        Kostenfeld = WG_Subdaten[7,],
+                                        Angaben_zum_Objekt = WG_Subdaten[8,],
+                                        Freitext_Zimmer = WG_Subdaten[9,],
+                                        Freitext_Lage = WG_Subdaten[10,],
+                                        Freitext_WG_Leben = WG_Subdaten[11,],
+                                        Freitext_Sonstiges = WG_Subdaten[12,],
+                                        Datum_Scraping = Sys.Date()))
+          
+          flog.info("S.%d | DL2 / Proxy: %s:%s", 
+                    Seite+1, proxy_obj[["options"]][["proxy"]], 
+                    proxy_obj[["options"]][["proxyport"]])          
+          flog.info("Hier noch Feedback zur Wiederholung")
+          
+        } else if (any(is.na(Rohdaten_neu[,1]))) {
+          
+          flog.warn("S.%d | DL2 / Scraping tw erfolgreich: E%d F%d",
+                    Seite + 1, sum(!is.na(Rohdaten_neu[,1])),
+                    sum(is.na(Rohdaten_neu[,1])))
+          
+          Sublinks <<- Rohdaten_neu %>% filter(is.na(Titel)) %>% select(Link) %>% pull()
+          
+          proxy_obj <<- proxy_tested %>%
+            slice_sample(n = 1) %>%
+            { use_proxy(url = .$ip,
+                        port = as.numeric(.$port),
+                        username = .$user,
+                        password = .$password)
+            }
+          
+          WG_Subdaten <<- sapply(Sublinks, Fun_Subdata)
+          
+          Rohdaten_neu <<- rbind(Rohdaten_neu, 
+                                 tibble(Link = as.vector(Sublinks),
+                                        Titel = WG_Subdaten[1,], 
+                                        WG_Konstellation = WG_Subdaten[2,],
+                                        Zimmergröße_Gesamtmiete = WG_Subdaten[3,], 
+                                        Adresse = WG_Subdaten[4,], 
+                                        Datum = WG_Subdaten[5,], 
+                                        WG_Details = WG_Subdaten[6,],
+                                        Kostenfeld = WG_Subdaten[7,],
+                                        Angaben_zum_Objekt = WG_Subdaten[8,],
+                                        Freitext_Zimmer = WG_Subdaten[9,],
+                                        Freitext_Lage = WG_Subdaten[10,],
+                                        Freitext_WG_Leben = WG_Subdaten[11,],
+                                        Freitext_Sonstiges = WG_Subdaten[12,],
+                                        Datum_Scraping = Sys.Date()))
+          
+          flog.info("S.%d | DL2 / Proxy: %s:%s", 
+                    Seite+1, proxy_obj[["options"]][["proxy"]], 
+                    proxy_obj[["options"]][["proxyport"]])
+        } else {
+          flog.info("S.%d | DL2 / Scraping erfolgreich: %d Link(s)",
+                    Seite + 1, length(WG_Subdaten[1, ]))
+          
+          flog.info("S.%d | DL2 / Proxy: %s:%s", 
+                    Seite+1, proxy_obj[["options"]][["proxy"]], 
+                    proxy_obj[["options"]][["proxyport"]])
+        }
+        
+      } else {
+        flog.info("S.%d | DL2 / Keine neuen Links", Seite + 1)
+      }
+      
+      flog.info("S.%d | DL2 / ERFOLGREICH", Seite + 1)
+      
+    }, error = function(e2) {
+      
+      flog.warn("S.%d | DL2 / Fehler: %s", Seite + 1, e2$message)
+      flog.info("S.%d | DL2 / Proxy: %s:%s", 
+                Seite+1, proxy_obj[["options"]][["proxy"]], 
+                proxy_obj[["options"]][["proxyport"]])   
+      flog.error("S.%d | DL1+2 / KEINE DATEN", Seite + 1)
+      
+    })
   })
+  
 }
 
 
-## Nicht vollständig gescrapte Fälle entfernen
+## Nicht vollständig gescrapte Fälle und Dubletten entfernen
 
 Rohdaten_neu_gefiltert <- Rohdaten_neu %>%
-  filter(!(is.na(Titel)))
+  filter(!(is.na(Titel))) %>%   
+  distinct(across(-Datum), .keep_all = TRUE)
+
+
+flog.info("== ENDE DATENSCRAPING =======================")
+flog.info("")
 
 
 
@@ -264,27 +501,21 @@ Rohdaten_neu_gefiltert <- Rohdaten_neu %>%
 
 if (nrow(Rohdaten_neu_gefiltert) > 0 || ncol(Rohdaten_neu_gefiltert) > 0) {
 
+flog.info("== BEGINN DATENARBEIT =======================")
   
 ## Speichern des Backups für Rohdaten
-
 write.csv(Rohdaten_neu_gefiltert, paste0("C:\\Users\\Fabian Hellmold\\Desktop\\WG-Gesucht-Scraper\\Hamburg\\Daten\\Backup\\Rohdaten\\", rohdaten_filename), 
           row.names = FALSE)
-
   
 ## Neue Daten mit altem Datensatz verbinden 
-
 Rohdaten_gesamt <- read_csv("C:\\Users\\Fabian Hellmold\\Desktop\\WG-Gesucht-Scraper\\Hamburg\\Daten\\Rohdaten\\Rohdaten.csv",
                             show_col_types = FALSE) %>%
-  rbind(Rohdaten_neu_gefiltert)  # %>%
-#  distinct(Link, .keep_all = TRUE)
-
+  rbind(Rohdaten_neu_gefiltert)  
 
 ## Alten Datensatz mit neuem Überschreiben 
-
 write.csv(Rohdaten_gesamt, "C:\\Users\\Fabian Hellmold\\Desktop\\WG-Gesucht-Scraper\\Hamburg\\Daten\\Rohdaten\\Rohdaten.csv", row.names = FALSE)
 
-print(" ")
-print("Rohdaten erfolgreich gespeichert")
+flog.info("Speichern der Rohdaten erfolgreich")
 
 
 
@@ -296,14 +527,7 @@ print("Rohdaten erfolgreich gespeichert")
 ################################################################################
 
 
-message("---------- DATENAUFBEREITUNG -----------")
-
 source("C:\\Users\\Fabian Hellmold\\Desktop\\WG-Gesucht-Scraper\\Hamburg\\Skripte\\Datenscraping\\Aufbereitungsskript_Hamburg_auto.R")
-
-message(" ")
-
-print(" ")
-print("Analysedaten erfolgreich gespeichert")
 
 
 
@@ -322,11 +546,14 @@ write.csv(Rohdaten_neu_gefiltert, paste0("C:\\Users\\Fabian Hellmold\\Dropbox\\W
 write.csv(Analysedaten_gesamt, "C:\\Users\\Fabian Hellmold\\Dropbox\\WG_Gesucht\\Hamburg\\Daten\\Analysedaten\\Analysedaten.csv", 
           row.names = FALSE) 
 
+flog.info("######### ABSCHLUSS SCRAPING HAMBURG ########")
+
 
 } else {
   
-  print(" ")
-  print("Keine neuen Daten gescraped")
+  flog.info("Keine neuen Anzeigen gescraped")
+  flog.info("")
+  flog.info("######### ABSCHLUSS SCRAPING HAMBURG ########")
   
 } 
 
@@ -340,9 +567,7 @@ write.csv(Analysedaten_gesamt, "C:\\Users\\Fabian Hellmold\\Dropbox\\WG_Gesucht\
 ################################################################################
 
 
-sink()
-
-file.copy(from = paste0("C:\\Users\\Fabian Hellmold\\Desktop\\WG-Gesucht-Scraper\\Hamburg\\Logs\\", log_filename), 
-          to = paste0("C:\\Users\\Fabian Hellmold\\Dropbox\\WG_Gesucht\\Hamburg\\Logs\\", log_filename), 
+file.copy(from = paste0("C:\\Users\\Fabian Hellmold\\Desktop\\WG-Gesucht-Scraper\\Hamburg\\Logs\\Log_Hamburg ",format(Sys.time(), "%d.%m.%Y {%H}"),".txt"), 
+          to = paste0("C:\\Users\\Fabian Hellmold\\Dropbox\\WG_Gesucht\\Hamburg\\Logs\\Log_Hamburg ",format(Sys.time(), "%d.%m.%Y {%H}"),".txt"),
           overwrite = TRUE)
 

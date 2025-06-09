@@ -64,7 +64,7 @@ proxy_tested <- proxy_df %>%
   filter(works)
 
 if (sum(proxy_tested$works) > 0) {
-  flog.info("%d von %d Proxys funktionsfähig", sum(proxy_tested$works), nrow(proxy_tested))
+  flog.info("%d von 10 Proxys funktionsfähig", nrow(proxy_tested))
 } else {
   flog.error("Keine funktionierenden Proxys ermittelt")
   stop("Abbruch: Keine funktionierenden Proxys") 
