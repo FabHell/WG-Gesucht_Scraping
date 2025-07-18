@@ -1,0 +1,286 @@
+---
+title: Scraping WG-Gesucht
+output: 
+  html_document: 
+    theme: journal
+date: "`r Sys.Date()`"
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = F, include = F, warning = F, message = F)
+
+library(tidyverse)
+library(knitr)
+library(kableExtra)
+library(here)
+
+```
+
+```{r Analysedaten}
+
+
+Daten_Hamburg <- read_csv("C:\\Users\\Fabian Hellmold\\Desktop\\WG-Gesucht-Scraper\\Hamburg\\Daten\\Analysedaten\\Analysedaten.csv",
+                          show_col_types = FALSE)
+
+Daten_Kassel <- read_csv("C:\\Users\\Fabian Hellmold\\Desktop\\WG-Gesucht-Scraper\\Kassel\\Daten\\Analysedaten\\Analysedaten.csv",
+                          show_col_types = FALSE)
+
+Daten_Bremen <- read_csv("C:\\Users\\Fabian Hellmold\\Desktop\\WG-Gesucht-Scraper\\Bremen\\Daten\\Analysedaten\\Analysedaten.csv",
+                          show_col_types = FALSE)
+
+Daten_Leipzig <- read_csv("C:\\Users\\Fabian Hellmold\\Desktop\\WG-Gesucht-Scraper\\Leipzig\\Daten\\Analysedaten\\Analysedaten.csv",
+                          show_col_types = FALSE)
+
+Daten_München <- read_csv("C:\\Users\\Fabian Hellmold\\Desktop\\WG-Gesucht-Scraper\\München\\Daten\\Analysedaten\\Analysedaten.csv",
+                          show_col_types = FALSE)
+
+Daten_Wien <- read_csv("C:\\Users\\Fabian Hellmold\\Desktop\\WG-Gesucht-Scraper\\Wien\\Daten\\Analysedaten\\Analysedaten.csv",
+                          show_col_types = FALSE)
+```
+
+```{r Logdaten}
+
+
+extract_log_loops <- function(log_path) {
+  lines <- readLines(log_path, encoding = "UTF-8")
+  
+  stadt <- str_match(log_path, "Log_([^ ]+) ")[,2]
+  
+  file_info <- str_match(basename(log_path), "(\\d{2}\\.\\d{2}\\.\\d{4}) \\{(\\d{1,2})\\}\\.txt")
+  datum <- dmy(file_info[2])
+  uhrzeit <- sprintf("%02d:00", as.integer(file_info[3]))
+  
+  loop_start_idx <- which(str_detect(lines, "Starte Loop"))
+  loop_blocks <- map2(loop_start_idx, lead(loop_start_idx, default = length(lines)), \(start, end) {
+    lines[start:(end - 1)]
+  })
+  
+  map_dfr(loop_blocks, function(block) {
+    block_text <- paste(block, collapse = "\n")
+    seite <- as.integer(str_match(block_text, "S\\.(\\d+)")[,2])
+    
+    max_dl <- 5
+    out <- tibble(
+      Stadt = stadt,
+      Datum = datum,
+      Uhrzeit = uhrzeit,
+      Seite = seite
+    )
+    
+    for (i in 1:max_dl) {
+      proxy_pattern <- sprintf("S\\.%d \\| DL%d / Proxy: ([\\d\\.]+:\\d+)", seite, i)
+      proxy <- str_match(block_text, proxy_pattern)[,2]
+      
+      result_pattern <- sprintf(
+        "S\\.%d \\| DL%d / (Scraping erfolgreich: \\d+ Link\\(s\\)|Fehler: .+|Keine neuen Links|Kein Scraping|Teilweise Scrapingfehler: .+)",
+        seite, i
+      )
+      result <- str_match(block_text, result_pattern)[,2]
+      
+      out[[paste0("DL", i, "_Proxy")]] <- proxy
+      out[[paste0("DL", i, "_Ergebnis")]] <- result
+    }
+    
+    out
+  })
+}
+
+
+log_pfade_grade <- c(
+  "C:/Users/Fabian Hellmold/Desktop/WG-Gesucht-Scraper/Bremen/Logs",
+  "C:/Users/Fabian Hellmold/Desktop/WG-Gesucht-Scraper/Hamburg/Logs",
+  "C:/Users/Fabian Hellmold/Desktop/WG-Gesucht-Scraper/Kassel/Logs",
+  "C:/Users/Fabian Hellmold/Desktop/WG-Gesucht-Scraper/Leipzig/Logs"
+)
+
+logs_heute_grade <- map(log_pfade_grade, function(pfad) {
+  list.files(
+    path = pfad,
+    pattern = paste0("Log_\\w+ ", format(Sys.Date(), "%d.%m.%Y"), " \\{\\d+\\}\\.txt"),
+    full.names = TRUE
+  )
+}) %>% unlist()
+
+
+log_daten_gesamt_grade <- map_dfr(logs_heute_grade, extract_log_loops) %>%
+  rowwise() %>%
+  mutate(
+    letzter_dl = {
+      durchläufe <- paste0("DL", 5:1)
+      letzter <- NA_character_
+      for (dl in durchläufe) {
+        if (!is.na(get(paste0(dl, "_Ergebnis")))) {
+          letzter <- dl
+          break
+        }
+      }
+      letzter
+    },
+    Ergebnis_letzter_DL = if (!is.na(letzter_dl)) get(paste0(letzter_dl, "_Ergebnis")) else NA_character_
+  ) %>%
+  ungroup() %>%
+  select(Stadt, Datum, Uhrzeit, Seite, Letzter_Durchlauf = letzter_dl, Ergebnis_letzter_DL) %>%
+  mutate(
+    Scraping_Status = case_when(
+      str_detect(Ergebnis_letzter_DL, "Keine neuen Links") ~ 3,
+      str_detect(Ergebnis_letzter_DL, "Fehler") ~ 2,
+      str_detect(Ergebnis_letzter_DL, "Kein Scraping") ~ 2,
+      str_detect(Ergebnis_letzter_DL, "Teilweise Scrapingfehler") ~ 1,
+      str_detect(Ergebnis_letzter_DL, "Scraping erfolgreich") ~ 0,
+      TRUE ~ NA_real_)
+    ) 
+
+
+log_pfade_ungrade <- c(
+  "C:/Users/Fabian Hellmold/Desktop/WG-Gesucht-Scraper/München/Logs",
+  "C:/Users/Fabian Hellmold/Desktop/WG-Gesucht-Scraper/Wien/Logs"
+)
+
+logs_heute_ungrade <- map(log_pfade_ungrade, function(pfad) {
+  list.files(
+    path = pfad,
+    pattern = paste0("Log_\\w+ ", format(Sys.Date(), "%d.%m.%Y"), " \\{\\d+\\}\\.txt"),
+    full.names = TRUE
+  )
+}) %>% unlist()
+
+
+log_daten_gesamt_ungrade <- map_dfr(logs_heute_ungrade, extract_log_loops) %>%
+  rowwise() %>%
+  mutate(
+    letzter_dl = {
+      durchläufe <- paste0("DL", 5:1)
+      letzter <- NA_character_
+      for (dl in durchläufe) {
+        if (!is.na(get(paste0(dl, "_Ergebnis")))) {
+          letzter <- dl
+          break
+        }
+      }
+      letzter
+    },
+    Ergebnis_letzter_DL = if (!is.na(letzter_dl)) get(paste0(letzter_dl, "_Ergebnis")) else NA_character_
+  ) %>%
+  ungroup() %>%
+  select(Stadt, Datum, Uhrzeit, Seite, Letzter_Durchlauf = letzter_dl, Ergebnis_letzter_DL) %>%
+  mutate(
+    Scraping_Status = case_when(
+      str_detect(Ergebnis_letzter_DL, "Keine neuen Links") ~ 3,
+      str_detect(Ergebnis_letzter_DL, "Fehler") ~ 2,
+      str_detect(Ergebnis_letzter_DL, "Kein Scraping") ~ 2,
+      str_detect(Ergebnis_letzter_DL, "Teilweise Scrapingfehler") ~ 1,
+      str_detect(Ergebnis_letzter_DL, "Scraping erfolgreich") ~ 0,
+      TRUE ~ NA_real_)
+    ) 
+
+
+logdaten_gesamt_gradeungrade <- rbind(log_daten_gesamt_grade, log_daten_gesamt_ungrade)
+
+```
+
+
+## Anzahl gescrapter Anzeigen
+
+-   In Hamburg wurden heute [**`r Daten_Hamburg %>% filter(datum_scraping == Sys.Date()) %>% nrow()`**]{style="color: steelblue;"} Angebote gescraped. Letzte Woche waren es am selben Wochentag [**`r Daten_Hamburg %>% filter(datum_scraping == Sys.Date()-7) %>% nrow()`**]{style="color: grey;"} Angebote. Das ist ein Unterschied von [**`r round((nrow(Daten_Hamburg %>% filter(datum_scraping == Sys.Date())) - nrow(Daten_Hamburg %>% filter(datum_scraping == Sys.Date() - 7))) / nrow(Daten_Hamburg %>% filter(datum_scraping == Sys.Date() - 7)) * 100, 1)`%**]{style="color: black;"}.
+-   Für Kassel wurden [**`r Daten_Kassel %>% filter(datum_scraping == Sys.Date()) %>% nrow()`**]{style="color: steelblue;"} Angebote erfasst. Die Anzahl unterscheidet sich um [**`r round((nrow(Daten_Kassel %>% filter(datum_scraping == Sys.Date())) - nrow(Daten_Kassel %>% filter(datum_scraping == Sys.Date() - 7))) / nrow(Daten_Kassel %>% filter(datum_scraping == Sys.Date() - 7)) * 100, 1)`%**]{style="color: black;"} von der der Vorwoche ([**`r Daten_Kassel %>% filter(datum_scraping == Sys.Date()-7) %>% nrow()`**]{style="color: grey;"} Angebote).
+
+<div style="margin-bottom: -10px;"></div>
+
+```{r plot, include=TRUE, fig.height=1.5, fig.width=3.75}
+
+Daten_ges <- rbind(Daten_Hamburg, Daten_Kassel, Daten_Bremen, Daten_Leipzig, 
+                   Daten_München, Daten_Wien)
+
+Wochenreferenz <- Daten_ges %>%
+  filter(datum_scraping == Sys.Date() - 7) %>%
+  mutate(New_Date = datum_scraping + 7) %>%
+  group_by(stadt) %>%
+  summarise(Anzahl = n())
+
+
+Daten_ges %>%
+  filter(datum_scraping == Sys.Date()) %>%
+  group_by(stadt) %>%
+  summarise(Anzahl = n()) %>%
+  
+  ggplot(aes(x = stadt, y = Anzahl)) +
+  geom_col(data = Wochenreferenz, aes(x=stadt, y=Anzahl), 
+           inherit.aes = F, fill = "grey") +
+  geom_col(fill = "steelblue", width = 0.65) +
+  labs(title = NULL, x = NULL, y = NULL) +
+  theme_minimal()
+  
+```
+
+## Erfolg der Scrapingloops
+
+Von den heutigen Scrapingzyklen mit neuen Links waren
+<div style="margin-bottom: 2px;"></div>
+
+-   [**`r nrow(logdaten_gesamt_gradeungrade %>% filter(Scraping_Status == 0))`**]{style="color: #84b884;"} der Loops vollständig erfolgreich.
+-   [**`r nrow(logdaten_gesamt_gradeungrade %>% filter(Scraping_Status == 1))`**]{style="color: #f1a765;"} nur teilweise erfolgreich.
+-   bei [**`r nrow(logdaten_gesamt_gradeungrade %>% filter(Scraping_Status == 2))`**]{style="color: #d97c7c;"} der Loops keine Datenabfragen möglich.
+
+<div style="margin-bottom: 20px;"></div>
+
+```{r echo=FALSE, include = TRUE, results='asis', fig.height=3.5, fig.width= 3.75}
+
+
+log_daten_gesamt_grade %>%
+
+ggplot(aes(x = Seite, y = 1, fill = as.factor(Scraping_Status))) +  
+  geom_tile(color = "white", linewidth = 0.3, height = 0.8) +
+  scale_fill_manual(
+    name = "", 
+    values = c("0" = "#84b884", "1" = "#f1a765",
+               "2" = "#d97c7c", "3" = "#cfcfcf"),
+    labels = c("0" = "Erfolgreich", "1" = "TW Erfolgreich",
+               "2" = "Fehler", "3" = "Keine neuen Anzeigen")) +
+  facet_grid(Uhrzeit ~ Stadt, switch = "both") +
+  labs(title = NULL, x = NULL, y = NULL) +
+  theme_minimal() +
+  theme(
+    axis.text = element_blank(),
+    strip.placement = "outside",
+    legend.position = "none",
+    strip.background = element_rect(fill = "#f8f5f2", color = "black"), 
+    strip.text = element_text(face = "bold", size = 10), 
+    strip.text.y.left = element_text(angle = 0),
+    strip.text.x.bottom = element_text(margin = margin(t=5, b=5, l=5, r=5)),
+    panel.grid = element_blank()
+  )
+
+
+```
+
+<br>
+
+```{r echo=FALSE, include = TRUE, results='asis', fig.height=3.5, fig.width= 3.75}
+
+
+log_daten_gesamt_ungrade %>%
+
+ggplot(aes(x = Seite, y = 1, fill = as.factor(Scraping_Status))) +  
+  geom_tile(color = "white", linewidth = 0.3, height = 0.8) +
+  scale_fill_manual(
+    name = "", 
+    values = c("0" = "#84b884", "1" = "#f1a765",
+               "2" = "#d97c7c", "3" = "#cfcfcf"),
+    labels = c("0" = "Erfolgreich", "1" = "TW Erfolgreich",
+               "2" = "Fehler", "3" = "Keine neuen Anzeigen")) +
+  facet_grid(Uhrzeit ~ Stadt, switch = "both") +
+  labs(title = NULL, x = NULL, y = NULL) +
+  theme_minimal() +
+  theme(
+    axis.text = element_blank(),
+    strip.placement = "outside",
+    legend.position = "none",
+    strip.background = element_rect(fill = "#f8f5f2", color = "black"), 
+    strip.text = element_text(face = "bold", size = 10), 
+    strip.text.y.left = element_text(angle = 0),
+    strip.text.x.bottom = element_text(margin = margin(t=5, b=5, l=5, r=5)),
+    panel.grid = element_blank()
+  )
+
+
+```
