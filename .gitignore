@@ -52,15 +52,15 @@ rsconnect/
 # Selber Hinzugefügt
 Stadtdummy/
 München/
+Wien/
+Berlin/
 Bremen/
 Kassel/
 Leipzig/
 Hamburg/Logs/
 Hamburg/Daten/
 Hamburg/Ergebnisse/
-Kassel/Logs/
-Log_Test/
-Kassel/Daten/
-Kassel/Ergebnisse/
+Hamburg/Skripte/Datenanalyse/
+
 *.Rproj
 *.html
