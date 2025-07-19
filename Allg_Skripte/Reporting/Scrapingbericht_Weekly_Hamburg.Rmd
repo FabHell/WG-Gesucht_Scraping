@@ -1,0 +1,318 @@
+---
+title: Wöchentlicher Scrapingbericht
+output: 
+  html_document: 
+    theme: journal
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = F, include = F, warning = F, message = F)
+
+library(tidyverse)
+library(patchwork)
+library(ggtext)
+library(sf)
+
+```
+
+
+```{r Analysedaten}
+
+
+Daten_Hamburg <- read_csv("C:\\Users\\Fabian Hellmold\\Desktop\\WG-Gesucht-Scraper\\Hamburg\\Daten\\Analysedaten\\Analysedaten.csv",
+                          show_col_types = FALSE) %>%
+  filter(is.na(befristungsdauer) | befristungsdauer >= 60) %>% 
+  filter(gesamtmiete > 250)
+
+
+```
+
+
+```{r Logdaten}
+
+extract_log_loops <- function(log_path) {
+  lines <- readLines(log_path, encoding = "UTF-8")
+  
+  stadt <- str_match(log_path, "Log_([^ ]+) ")[,2]
+  
+  file_info <- str_match(basename(log_path), "(\\d{2}\\.\\d{2}\\.\\d{4}) \\{(\\d{1,2})\\}\\.txt")
+  datum <- dmy(file_info[2])
+  uhrzeit <- sprintf("%02d:00", as.integer(file_info[3]))
+  
+  loop_start_idx <- which(str_detect(lines, "Starte Loop"))
+  loop_blocks <- map2(loop_start_idx, lead(loop_start_idx, default = length(lines)), \(start, end) {
+    lines[start:(end - 1)]
+  })
+  
+  map_dfr(loop_blocks, function(block) {
+    block_text <- paste(block, collapse = "\n")
+    seite <- as.integer(str_match(block_text, "S\\.(\\d+)")[,2])
+    
+    max_dl <- 5
+    out <- tibble(
+      Stadt = stadt,
+      Datum = datum,
+      Uhrzeit = uhrzeit,
+      Seite = seite
+    )
+    
+    for (i in 1:max_dl) {
+      proxy_pattern <- sprintf("S\\.%d \\| DL%d / Proxy: ([\\d\\.]+:\\d+)", seite, i)
+      proxy <- str_match(block_text, proxy_pattern)[,2]
+      
+      result_pattern <- sprintf(
+        "S\\.%d \\| DL%d / (Scraping erfolgreich: \\d+ Link\\(s\\)|Fehler: .+|Keine neuen Links|Kein Scraping|Teilweise Scrapingfehler: .+)",
+        seite, i
+      )
+      result <- str_match(block_text, result_pattern)[,2]
+      
+      out[[paste0("DL", i, "_Proxy")]] <- proxy
+      out[[paste0("DL", i, "_Ergebnis")]] <- result
+    }
+    
+    out
+  })
+}
+
+
+
+log_pfade_hamburg <- c(
+  "C:/Users/Fabian Hellmold/Desktop/WG-Gesucht-Scraper/Hamburg/Logs"
+)
+
+logs_woche_hamburg <- map(log_pfade_hamburg, function(pfad) {
+  
+  datum_vec <- format(Sys.Date() - 0:6, "%d.%m.%Y")
+  pattern <- paste0("Log_\\w+ (", paste(datum_vec, collapse = "|"), ") \\{\\d+\\}\\.txt")
+
+  list.files(
+    path = pfad,
+    pattern = pattern,
+    full.names = TRUE
+  )
+}) %>% unlist()
+
+
+
+log_daten_gesamt_hamburg <- map_dfr(logs_woche_hamburg, extract_log_loops) %>%
+  rowwise() %>%
+  mutate(
+    letzter_dl = {
+      durchläufe <- paste0("DL", 5:1)
+      letzter <- NA_character_
+      for (dl in durchläufe) {
+        if (!is.na(get(paste0(dl, "_Ergebnis")))) {
+          letzter <- dl
+          break
+        }
+      }
+      letzter
+    },
+    Ergebnis_letzter_DL = if (!is.na(letzter_dl)) get(paste0(letzter_dl, "_Ergebnis")) else NA_character_
+  ) %>%
+  ungroup() %>%
+  select(Stadt, Datum, Uhrzeit, Seite, Letzter_Durchlauf = letzter_dl, Ergebnis_letzter_DL) %>%
+  mutate(
+    Scraping_Status = case_when(
+      str_detect(Ergebnis_letzter_DL, "Keine neuen Links") ~ 3,
+      str_detect(Ergebnis_letzter_DL, "Fehler") ~ 2,
+      str_detect(Ergebnis_letzter_DL, "Kein Scraping") ~ 2,
+      str_detect(Ergebnis_letzter_DL, "Teilweise Scrapingfehler") ~ 1,
+      str_detect(Ergebnis_letzter_DL, "Scraping erfolgreich") ~ 0,
+      TRUE ~ NA_real_)
+    ) 
+
+
+```
+
+
+``` {r Geodaten}
+
+Geodaten_Stadtteile <- st_read("C:\\Users\\Fabian Hellmold\\Desktop\\WG-Gesucht-Scraper\\Hamburg\\Daten\\Geodaten\\Stadtteile_Hamburg.shp") %>%
+  filter(stadtteil_ != "Neuwerk") %>%
+  select(stadtteil = stadtteil_, stadtbezirk = bezirk_nam)
+
+Grenzen_Elbe <- st_read("C:\\Users\\Fabian Hellmold\\Desktop\\WG-Gesucht-Scraper\\Hamburg\\Daten\\Geodaten\\Geo_Elbe\\Elbe.shp")
+
+St_Teile <- as.data.frame(Geodaten_Stadtteile) %>%
+  select(stadtteil) %>%
+  pull()
+
+
+```
+
+
+## Anzahl gescrapter Anzeigen
+
+- Diese Woche wurden insgesamt [**`r nrow(Daten_Hamburg %>% filter(datum_scraping >= Sys.Date() - 6))`**]{style="color: steelblue;"} Anzeigen gescraped. Letzte Woche waren es [**`r nrow(Daten_Hamburg %>% filter(datum_scraping >= Sys.Date() - 13 & datum_scraping <= Sys.Date() - 7))`**]{style="color: grey;"} Anzeigen.
+- Die Anzahl unterscheidet sich um [**`r round((nrow(Daten_Hamburg %>% filter(datum_scraping >= Sys.Date() - 6)) - nrow(Daten_Hamburg %>% filter(datum_scraping >= Sys.Date() - 13 & datum_scraping <= Sys.Date() - 7))) / nrow(Daten_Hamburg %>% filter(datum_scraping >= Sys.Date() - 13 & datum_scraping <= Sys.Date() - 7)) * 100, 1)`%**]{style="color: black;"} von der der Vorwoche.
+ 
+
+
+```{r plot1, include=TRUE, fig.height=2.5, fig.width=7}
+
+
+Wochenreferenz <- Daten_Hamburg %>%
+  filter(datum_scraping >= Sys.Date() - 13 &
+         datum_scraping <= Sys.Date() - 7) %>%
+  mutate(New_Date = datum_scraping + 7) %>%
+  group_by(New_Date) %>%
+  summarise(Anzahl = n())
+
+
+Daten_Hamburg %>%
+  filter(datum_scraping >= Sys.Date() - 6) %>%
+  group_by(datum_scraping) %>%
+  summarise(Anzahl = n()) %>%
+
+  ggplot(aes(x = datum_scraping, y = Anzahl)) +
+  geom_col(data = Wochenreferenz, aes(x=New_Date, y=Anzahl), 
+           inherit.aes = F, fill = "grey") +
+  geom_col(fill = "steelblue", width = 0.65) +
+  scale_x_date(date_breaks = "1 day", date_labels = "%d. %B / %a") +
+  labs(title = NULL, x = NULL, y = NULL) +
+  theme_minimal()
+  
+
+```
+
+
+## Ergebnis der Scrapingloops
+
+-   Die meisten Wohnungsangebote wurden in dieser Woche um **[`r log_daten_gesamt_hamburg %>% mutate(Links_gescraped = ifelse(Scraping_Status == 0, as.integer(str_match(Ergebnis_letzter_DL, "^Scraping erfolgreich: (\\d+) Link\\(s\\)$")[, 2]), 0)) %>%  group_by(Uhrzeit) %>% summarize(Sum = sum(Links_gescraped, na.rm = TRUE)) %>% slice_max(Sum, n = 1) %>% pull(Uhrzeit) `]{style="color: #766e63;"}** Uhr gescraped; die<br>wenigsten um **[`r log_daten_gesamt_hamburg %>% mutate(Links_gescraped = ifelse(Scraping_Status == 0, as.integer(str_match(Ergebnis_letzter_DL, "^Scraping erfolgreich: (\\d+) Link\\(s\\)$")[, 2]), 0)) %>%  group_by(Uhrzeit) %>% summarize(Sum = sum(Links_gescraped, na.rm = TRUE)) %>% slice_min(Sum, n = 1) %>% pull(Uhrzeit)`]{style="color: #766e63;"}** Uhr.
+-  Vollständig erfolgreiche Scrapingloops traten um [**`r log_daten_gesamt_hamburg %>% group_by(Uhrzeit, Scraping_Status) %>% summarise(count = n(), .groups = "drop") %>% filter(Scraping_Status == 0) %>% slice_max(count, n = 1) %>% pull(Uhrzeit)`**]{style="color: green;"} Uhr am häufigsten auf. Um [**`r log_daten_gesamt_hamburg %>% group_by(Uhrzeit, Scraping_Status) %>% summarise(count = n(), .groups = "drop") %>% filter(Scraping_Status == 2) %>% slice_max(count, n = 1) %>% pull(Uhrzeit)`**]{style="color: red;"}<br>Uhr scheiteren trotz neuer Links die meisten Scrapingloops.
+-  Von den Scrapingzyklen mit neuen Links waren [**`r nrow(log_daten_gesamt_hamburg %>% filter(Scraping_Status == 0))`**]{style="color: green;"} Loops vollständig erfolgreich, [**`r nrow(log_daten_gesamt_hamburg %>% filter(Scraping_Status == 1))`**]{style="color: orange;"} teilweise<br>erfolgreich und bei [**`r nrow(log_daten_gesamt_hamburg %>% filter(Scraping_Status == 2))`**]{style="color: red;"} der Loops keine Datenabfragen möglich.
+
+
+```{r plot2, include=TRUE, fig.height=4, fig.width=7}
+
+Label <- log_daten_gesamt_hamburg %>% 
+  mutate(
+    Links_gescraped = ifelse(Scraping_Status == 0, as.integer(str_match(Ergebnis_letzter_DL, "^Scraping erfolgreich: (\\d+) Link\\(s\\)$")[, 2]), 0
+    )) %>%
+  group_by(Uhrzeit) %>%
+  summarize(Sum = sum(Links_gescraped, na.rm = TRUE))
+
+Abb_1 <- log_daten_gesamt_hamburg %>%
+  mutate(
+    Links_gescraped = ifelse(Scraping_Status == 0, as.integer(str_match(Ergebnis_letzter_DL, "^Scraping erfolgreich: (\\d+) Link\\(s\\)$")[, 2]), 0
+    )) %>%
+  group_by(Uhrzeit, Seite) %>%
+  summarise(Links_gescraped = sum(Links_gescraped)) %>% 
+  
+  ggplot(aes(x = Seite, y = Links_gescraped)) +
+  geom_col(fill = "#766e63", color = "#ffffff") +
+  scale_y_continuous(breaks = c(5,15,25)) +
+  facet_wrap(~Uhrzeit, nrow = 1) +
+  geom_label(data = Label,
+             aes(x = Inf, y = Inf, label = Sum),
+             hjust = 1, vjust = 1, inherit.aes = FALSE,
+             color = "#766e63", size = 3,
+             fill = "white",
+             label.size = 0) +
+  labs(x = NULL, y = NULL, title = NULL) +
+  theme_minimal() +
+  theme(
+    axis.text.x = element_blank(),
+    strip.text = element_blank())
+
+
+Abb_2 <- log_daten_gesamt_hamburg %>%
+
+  group_by(Uhrzeit, Scraping_Status) %>%
+  summarise(count = n(), .groups = "drop") %>%
+  mutate(Scraping_Status = factor(Scraping_Status),
+         y_label = "Kategorien") %>%
+  
+  ggplot(aes(x = Scraping_Status, y = y_label, fill = Scraping_Status)) +
+  geom_tile(color = "black", width = 0.9, height = 0.9, show.legend = FALSE) +
+  geom_text(aes(label = count), color = "black", size = 2.5) +
+  scale_fill_manual(values = c("0" = "#84b884", "1" = "#f1a765",
+                               "2" = "#d97c7c", "3" = "#cfcfcf")) +
+  facet_wrap(~ Uhrzeit, nrow = 1) +
+  labs(title = NULL, x = NULL, y = NULL, fill = NULL) +
+  theme_minimal() +
+  theme(
+    axis.text = element_blank(),
+    axis.ticks = element_blank(),
+    panel.grid = element_blank(),
+    axis.text.y = element_textbox(
+      size = 9.5, face = "bold", fill = "#f8f5f2", linetype = 1, linewidth = 0.2,
+      box.color = "black", padding = margin(2, 4, 1, 4), margin = margin(r = -2)),
+    strip.text = element_blank()
+  )
+
+
+Abb_3 <- log_daten_gesamt_hamburg %>%
+  mutate(
+    Datum = as.Date(Datum, format = "%d.%m.%Y"),
+    Wochentag = format(Datum, "%d. %B / %a"),
+    Wochentag = factor(Wochentag, levels = sort(unique(Wochentag))),
+    Loopzeit = factor(Uhrzeit, levels = sort(unique(Uhrzeit)))  
+  ) %>%
+  ggplot(aes(x = Seite, y = 1, fill = as.factor(Scraping_Status))) +  
+  geom_tile(color = "white", linewidth = 0.3, height = 0.8) +
+  scale_fill_manual(
+    name = "", 
+    values = c("0" = "#84b884", "1" = "#f1a765",
+               "2" = "#d97c7c", "3" = "#cfcfcf"),
+    labels = c("0" = "Erfolgreich", "1" = "Teilweise erfolgreich",
+               "2" = "Kein Scraping", "3" = "Keine neuen Anzeigen")) +
+  facet_grid(Wochentag ~ Loopzeit, switch = "both") +
+  labs(title = NULL, x = NULL, y = NULL) +
+  theme_minimal() +
+  theme(
+    axis.text = element_blank(),
+    strip.placement = "outside",
+    legend.position = "bottom",
+    strip.background = element_rect(fill = "#f8f5f2", color = "black"), 
+    strip.text = element_text(face = "bold", size = 10), 
+    strip.text.y.left = element_text(angle = 0),
+    strip.text.x.bottom = element_text(margin = margin(t=5, b=5, l=5, r=5)),
+    panel.grid = element_blank()
+  )
+
+
+Abb_1 + Abb_2 + Abb_3 +
+  plot_layout(ncol = 1, heights = c(0.4, 0.1, 1))
+
+
+```
+
+
+
+## Geografische Verteilung
+
+-  Insgesamt wurden diese Woche neue Angebote für [**`r nrow(Geodaten_Stadtteile %>% right_join(Daten_Hamburg, by = "stadtteil") %>% filter(datum_scraping > Sys.Date()-7) %>% tibble %>%  select(stadtteil) %>% distinct())`**]{style="color: #b9a8d1;"} der [**`r nrow(Geodaten_Stadtteile)`**]{style="color: grey;"} Hamburger Stadtteile erfasst.
+-  Die Lage der Wohnung wurde für [**`r nrow(Daten_Hamburg %>% filter(datum_scraping > Sys.Date()-7 & stadtteil_quelle == "Geocode_OSM"))`**]{style="color: #8d75aa;"} Angebote mittels Geocoding ermittelt.
+-  Für [**`r nrow(Daten_Hamburg %>% filter(datum_scraping > Sys.Date()-7) %>% filter(is.na(stadtteil)))`**]{style="color: black;"} der  [**`r nrow(Daten_Hamburg %>% filter(datum_scraping > Sys.Date()-7))`**]{style="color: black;"} gescrapten Angebote konnte kein Stadtteil ermittelt werden.
+
+
+```{r plot3, include=TRUE, fig.height=3.5, fig.width=7}
+
+
+Karte_1 <- Geodaten_Stadtteile %>%
+  right_join(Daten_Hamburg, by = "stadtteil") %>%
+  filter(datum_scraping > Sys.Date()-7) %>%
+  
+  ggplot() +
+  geom_sf(data = Geodaten_Stadtteile, fill = "gray" ,color = "transparent") +
+  geom_sf(fill = "#b9a8d1", show.legend = F) +
+  theme_void()
+
+Karte_2 <- Geodaten_Stadtteile %>%
+  right_join(Daten_Hamburg, by = "stadtteil") %>%
+  filter(datum_scraping > Sys.Date()-7 &
+         stadtteil_quelle == "Geocode_OSM") %>%
+  
+  ggplot() +
+  geom_sf(data = Geodaten_Stadtteile, fill = "gray" ,color = "transparent") +
+  geom_sf(fill = "#8d75aa", show.legend = F) +
+  theme_void()
+
+
+Karte_1 + Karte_2  +
+  plot_layout(nrow = 1, heights = c(1, 1))
+
+
+```

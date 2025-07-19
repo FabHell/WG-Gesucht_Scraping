@@ -1,0 +1,204 @@
+---
+title: Scraping WG-Gesucht
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = F, include = F, warning = F, message = F)
+
+library(tidyverse)
+library(knitr)
+library(kableExtra)
+library(here)
+
+```
+
+```{r Analysedaten}
+
+
+Daten_Hamburg <- read_csv("C:\\Users\\Fabian Hellmold\\Desktop\\WG-Gesucht-Scraper\\Hamburg\\Daten\\Analysedaten\\Analysedaten.csv",
+                          show_col_types = FALSE)
+
+
+```
+
+```{r Logdaten}
+
+
+extract_log_loops <- function(log_path) {
+  lines <- readLines(log_path, encoding = "UTF-8")
+  
+  stadt <- str_match(log_path, "Log_([^ ]+) ")[,2]
+  
+  file_info <- str_match(basename(log_path), "(\\d{2}\\.\\d{2}\\.\\d{4}) \\{(\\d{1,2})\\}\\.txt")
+  datum <- dmy(file_info[2])
+  uhrzeit <- sprintf("%02d:00", as.integer(file_info[3]))
+  
+  loop_start_idx <- which(str_detect(lines, "Starte Loop"))
+  loop_blocks <- map2(loop_start_idx, lead(loop_start_idx, default = length(lines)), \(start, end) {
+    lines[start:(end - 1)]
+  })
+  
+  map_dfr(loop_blocks, function(block) {
+    block_text <- paste(block, collapse = "\n")
+    seite <- as.integer(str_match(block_text, "S\\.(\\d+)")[,2])
+    
+    max_dl <- 5
+    out <- tibble(
+      Stadt = stadt,
+      Datum = datum,
+      Uhrzeit = uhrzeit,
+      Seite = seite
+    )
+    
+    for (i in 1:max_dl) {
+      proxy_pattern <- sprintf("S\\.%d \\| DL%d / Proxy: ([\\d\\.]+:\\d+)", seite, i)
+      proxy <- str_match(block_text, proxy_pattern)[,2]
+      
+      result_pattern <- sprintf(
+        "S\\.%d \\| DL%d / (Scraping erfolgreich: \\d+ Link\\(s\\)|Fehler: .+|Keine neuen Links|Kein Scraping|Teilweise Scrapingfehler: .+)",
+        seite, i
+      )
+      result <- str_match(block_text, result_pattern)[,2]
+      
+      out[[paste0("DL", i, "_Proxy")]] <- proxy
+      out[[paste0("DL", i, "_Ergebnis")]] <- result
+    }
+    
+    out
+  })
+}
+
+
+
+log_pfade_hamburg <- c(
+  "C:/Users/Fabian Hellmold/Desktop/WG-Gesucht-Scraper/Hamburg/Logs"
+)
+
+logs_heute_hamburg <- map(log_pfade_hamburg, function(pfad) {
+  list.files(
+    path = pfad,
+    pattern = paste0("Log_\\w+ ", format(Sys.Date(), "%d.%m.%Y"), " \\{\\d+\\}\\.txt"),
+    full.names = TRUE
+  )
+}) %>% unlist()
+
+
+
+log_daten_gesamt_hamburg <- map_dfr(logs_heute_hamburg, extract_log_loops) %>%
+  rowwise() %>%
+  mutate(
+    letzter_dl = {
+      durchläufe <- paste0("DL", 5:1)
+      letzter <- NA_character_
+      for (dl in durchläufe) {
+        if (!is.na(get(paste0(dl, "_Ergebnis")))) {
+          letzter <- dl
+          break
+        }
+      }
+      letzter
+    },
+    Ergebnis_letzter_DL = if (!is.na(letzter_dl)) get(paste0(letzter_dl, "_Ergebnis")) else NA_character_
+  ) %>%
+  ungroup() %>%
+  select(Stadt, Datum, Uhrzeit, Seite, Letzter_Durchlauf = letzter_dl, Ergebnis_letzter_DL) %>%
+  mutate(
+    Scraping_Status = case_when(
+      str_detect(Ergebnis_letzter_DL, "Keine neuen Links") ~ 3,
+      str_detect(Ergebnis_letzter_DL, "Fehler") ~ 2,
+      str_detect(Ergebnis_letzter_DL, "Kein Scraping") ~ 2,
+      str_detect(Ergebnis_letzter_DL, "Teilweise Scrapingfehler") ~ 1,
+      str_detect(Ergebnis_letzter_DL, "Scraping erfolgreich") ~ 0,
+      TRUE ~ NA_real_)
+    ) 
+
+
+```
+
+Automatischer Scrapingreport vom [`r format(Sys.time(), "%d.%m.%Y")`]{style="color: orange;"} für Anzeigen von WG-Zimmern in Hamburg <br>
+
+## Anzahl gescrapter Anzeigen
+
+-   Heute wurden **`r Daten_Hamburg %>% filter(datum_scraping == Sys.Date()) %>% nrow()`** Angebote gescrapt. Letzte Woche waren es am selben Wochentag **`r Daten_Hamburg %>% filter(datum_scraping == Sys.Date()-7) %>% nrow()`** Angebote. 
+
+<div style="margin-bottom: -10px;"></div>
+
+```{r plot, include=TRUE, fig.height=2.5, fig.width=6}
+
+Daten_Hamburg %>%
+  filter(datum_scraping >= Sys.Date() - 7) %>%
+  group_by(datum_scraping) %>%
+  summarise(Anzahl = n()) %>%
+  mutate(Heute = datum_scraping == Sys.Date()) %>%
+  
+  ggplot(aes(x = datum_scraping, y = Anzahl, fill = Heute)) +
+    geom_col(show.legend = F) +
+    scale_fill_manual(values = c("FALSE" = "steelblue", "TRUE" = "tomato")) +
+    scale_x_date(date_breaks = "1 day", date_labels = "%a %d. %B") +
+    labs(
+    title = "",
+    x = "",
+    y = "") +
+  theme_minimal()
+  
+```
+
+## Erfolg der Scrapingloops
+
+Von den heutigen Scrapingzyklen mit neuen Links waren ...
+<div style="margin-bottom: -0px;"></div>
+
+-   [**`r nrow(log_daten_gesamt_hamburg %>% filter(Scraping_Status == 0))`**]{style="color: green;"} der Loops vollständig erfolgreich.
+-   [**`r nrow(log_daten_gesamt_hamburg %>% filter(Scraping_Status == 1))`**]{style="color: orange;"} teilweise erfolgreich.
+-   bei [**`r nrow(log_daten_gesamt_hamburg %>% filter(Scraping_Status == 2))`**]{style="color: red;"} der Loops keine Datenabfragen möglich.
+
+<div style="margin-bottom: 20px;"></div>
+
+```{r echo=FALSE, include = TRUE, results='asis', fig.width= 4}
+
+scraping_matrix <- log_daten_gesamt_hamburg %>%
+  mutate(
+    Uhrzeit = paste0("Scraping ", Uhrzeit),
+    Seite   = paste0("Seite ", Seite),
+    
+    Ergebnis_letzter_DL = case_when(
+      str_detect(Ergebnis_letzter_DL, "^Scraping erfolgreich: \\d+ Link\\(s\\)$") ~ {
+        parts <- str_match(Ergebnis_letzter_DL, "^Scraping erfolgreich: (\\d+) Link\\(s\\)$")
+        paste0("<span style=\"color:green;\">Erfolgreich<br>", parts[,2], " Link(s)</span>")
+      },
+      
+      str_detect(Ergebnis_letzter_DL, "^TW Erfolgreich \\d+/\\d+$") ~ {
+        parts <- str_match(Ergebnis_letzter_DL, "^(TW Erfolgreich) (\\d+/\\d+)$")
+        paste0("<span style=\"color:orange;\">", parts[,2], "<br>", parts[,3], "</span>")
+      },
+      
+      Ergebnis_letzter_DL == "Kein Scraping" ~ 
+        "<span style=\"color:red;\">Kein<br>Scraping</span>",
+      
+      Ergebnis_letzter_DL == "Keine neuen Links" ~ 
+        "<span style=\"color:gray;\">Keine neuen <br>Links</span>",
+      
+      TRUE ~ Ergebnis_letzter_DL
+    )
+  ) %>%
+  select(-Stadt, -Letzter_Durchlauf, -Datum, -Scraping_Status) %>%
+  pivot_wider(names_from = Seite, values_from = Ergebnis_letzter_DL, values_fill = "-") %>%
+  arrange(Uhrzeit)
+
+
+kable(scraping_matrix, escape = FALSE, format = "html",
+      table.attr = "style='margin-left: 0; margin-right: 0'") %>%
+  column_spec(1, width = "80px", extra_css = "border-right: 2px solid #000; padding-left: 8px;
+              background-color: #f8f5f2; font-size: 11px;") %>% 
+  column_spec(2:6, width = "80px",
+              extra_css = "background-color: #f8f5f2; font-size: 11px;") %>% 
+  row_spec(1, extra_css = "border-top: 2px solid #000; padding-left: 8px; line-height: 1.35;") %>% 
+  row_spec(2:nrow(scraping_matrix),
+           extra_css = "border-top: 2px solid #f8f5f2; padding-left: 8px; line-height: 1.35;") %>%
+  kable_minimal(position = "left")
+
+
+```
+
+<br>

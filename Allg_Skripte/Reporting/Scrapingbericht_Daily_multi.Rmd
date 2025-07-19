@@ -197,7 +197,16 @@ Wochenreferenz <- Daten_ges %>%
   group_by(stadt) %>%
   summarise(Anzahl = n())
 
-
+Label <- Daten_ges %>%
+  filter(datum_scraping == Sys.Date()) %>%
+  group_by(stadt) %>%
+  summarise(Anzahl = n()) %>%
+  left_join(Wochenreferenz, by = "stadt") %>%
+  mutate(y = Anzahl.x/2,
+         y = if_else(y < 10, y+20, y),
+         label = round((Anzahl.x-Anzahl.y)/Anzahl.y,1))
+  
+  
 Daten_ges %>%
   filter(datum_scraping == Sys.Date()) %>%
   group_by(stadt) %>%
@@ -207,6 +216,8 @@ Daten_ges %>%
   geom_col(data = Wochenreferenz, aes(x=stadt, y=Anzahl), 
            inherit.aes = F, fill = "grey") +
   geom_col(fill = "steelblue", width = 0.65) +
+  geom_text(data = Label, aes(x = stadt, y = y, label = label),
+            size = 3) +
   labs(title = NULL, x = NULL, y = NULL) +
   theme_minimal()
   
