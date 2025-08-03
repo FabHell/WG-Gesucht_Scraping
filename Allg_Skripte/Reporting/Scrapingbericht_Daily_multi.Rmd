@@ -36,6 +36,9 @@ Daten_München <- read_csv("C:\\Users\\Fabian Hellmold\\Desktop\\WG-Gesucht-Scra
 
 Daten_Wien <- read_csv("C:\\Users\\Fabian Hellmold\\Desktop\\WG-Gesucht-Scraper\\Wien\\Daten\\Analysedaten\\Analysedaten.csv",
                           show_col_types = FALSE)
+
+Daten_Berlin <- read_csv("C:\\Users\\Fabian Hellmold\\Desktop\\WG-Gesucht-Scraper\\Berlin\\Daten\\Analysedaten\\Analysedaten.csv",
+                          show_col_types = FALSE)
 ```
 
 ```{r Logdaten}
@@ -133,6 +136,7 @@ log_daten_gesamt_grade <- map_dfr(logs_heute_grade, extract_log_loops) %>%
 
 log_pfade_ungrade <- c(
   "C:/Users/Fabian Hellmold/Desktop/WG-Gesucht-Scraper/München/Logs",
+  "C:/Users/Fabian Hellmold/Desktop/WG-Gesucht-Scraper/Berlin/Logs",
   "C:/Users/Fabian Hellmold/Desktop/WG-Gesucht-Scraper/Wien/Logs"
 )
 
@@ -189,7 +193,7 @@ logdaten_gesamt_gradeungrade <- rbind(log_daten_gesamt_grade, log_daten_gesamt_u
 ```{r plot, include=TRUE, fig.height=1.5, fig.width=3.75}
 
 Daten_ges <- rbind(Daten_Hamburg, Daten_Kassel, Daten_Bremen, Daten_Leipzig, 
-                   Daten_München, Daten_Wien)
+                   Daten_München, Daten_Wien, Daten_Berlin)
 
 Wochenreferenz <- Daten_ges %>%
   filter(datum_scraping == Sys.Date() - 7) %>%
@@ -279,7 +283,7 @@ ggplot(aes(x = Seite, y = 1, fill = as.factor(Scraping_Status))) +
                "2" = "#d97c7c", "3" = "#cfcfcf"),
     labels = c("0" = "Erfolgreich", "1" = "TW Erfolgreich",
                "2" = "Fehler", "3" = "Keine neuen Anzeigen")) +
-  facet_grid(Uhrzeit ~ Stadt, switch = "both") +
+  facet_grid(Uhrzeit ~ Stadt, switch = "both", scales = "free_x") +
   labs(title = NULL, x = NULL, y = NULL) +
   theme_minimal() +
   theme(

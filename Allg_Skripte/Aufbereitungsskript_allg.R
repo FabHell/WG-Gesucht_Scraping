@@ -170,6 +170,7 @@ flog.info("Bearbeitung der Sting-Variablen erfolgreich")
 
 ## Geocoding durchführen -------------------------------------------------------
 
+Geodaten_Stadtteile <- st_read(paste0("C:\\Users\\Fabian Hellmold\\Desktop\\WG-Gesucht-Scraper\\",stadt,"\\Daten\\Geodaten\\Geo_Stadtteile_",stadt,".shp"))
 
 St_Teile <- tibble(Geodaten_Stadtteile) %>%
   select(stadtteil) %>%

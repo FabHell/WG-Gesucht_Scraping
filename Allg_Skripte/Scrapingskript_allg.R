@@ -217,6 +217,7 @@ scrape_retries <- function(Seite, max_versuche = Wiederholungen) {
         html_attr("href") %>%
         .[str_starts(., "/wg-zimmer")] %>%
         paste0("https://www.wg-gesucht.de", .) %>%
+        str_subset("\\.\\d+\\.html$") %>%
         setdiff(Selektionslinks) 
       
       if (length(Sublinks) == 0) {
