@@ -49,8 +49,10 @@ Analysedaten_neu <- Rohdaten_neu_gefiltert %>%
          zimmergröße = str_remove(zimmergröße, "m²"),
          zimmergröße = as.numeric(zimmergröße),
          
-         gesamtmiete = str_extract(zimmergröße_gesamtmiete, "\\d{1,4}€"),
-         gesamtmiete = str_remove(gesamtmiete, "€"),
+         gesamtmiete = case_when(land == "Deutschland" ~ str_extract(zimmergröße_gesamtmiete, "\\d{1,4}€"),
+                                 land == "Schweiz" ~ str_extract(zimmergröße_gesamtmiete, "\\d{1,4}CHF")),
+         gesamtmiete = case_when(land == "Deutschland" ~ str_remove(gesamtmiete, "€"),
+                                 land == "Schweiz" ~ str_remove(gesamtmiete, "CHF")),
          gesamtmiete = as.numeric(gesamtmiete)) %>%
   
   select(-zimmergröße_gesamtmiete) %>%
@@ -170,6 +172,7 @@ flog.info("Bearbeitung der Sting-Variablen erfolgreich")
 
 ## Geocoding durchführen -------------------------------------------------------
 
+Geodaten_Stadtteile <- st_read(paste0("C:\\Users\\Fabian Hellmold\\Desktop\\WG-Gesucht-Scraper\\",stadt,"\\Daten\\Geodaten\\Geo_Stadtteile_",stadt,".shp"))
 
 St_Teile <- tibble(Geodaten_Stadtteile) %>%
   select(stadtteil) %>%

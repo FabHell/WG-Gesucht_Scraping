@@ -32,21 +32,6 @@ Seitenzahl <- 5
 
 ################################################################################
 #####                                                                      #####
-#####                                 GEODATEN                             #####
-#####                                                                      #####
-################################################################################
-
-
-library(tidyverse)
-library(sf)
-
-Geodaten_Stadtteile <- st_read(paste0("C:\\Users\\Fabian Hellmold\\Desktop\\WG-Gesucht-Scraper\\",stadt,"\\Daten\\Geodaten\\Stadtteile_Hamburg.shp"), quiet = T) %>%
-  select(stadtteil = stadtteil_)
-
-
-
-################################################################################
-#####                                                                      #####
 #####                       AUSFÜHRUNG SCRAPINGSKRIPT                      #####
 #####                                                                      #####
 ################################################################################

@@ -113,27 +113,31 @@ remove_special_chars <- function(x) {
 Analysedaten_clean <- Analysedaten_neu_geo %>%
   mutate(across(where(is.character), ~ remove_special_chars(.))) %>%
   mutate(
-    titel = substr(titel, 1, 1000),
+    titel = substr(titel, 1, 750),
     link = substr(link, 1, 1000),
     angaben_zum_objekt = substr(angaben_zum_objekt, 1, 1750),
     freitext_zimmer_1 = substr(freitext_zimmer, 1, 3500),
     freitext_zimmer_2 = substr(freitext_zimmer, 3501, 7000),
+    freitext_zimmer_3 = substr(freitext_zimmer, 7001, 10500),
     freitext_lage_1 = substr(freitext_lage, 1, 3500),
     freitext_lage_2 = substr(freitext_lage, 3501, 7000),
+    freitext_lage_3 = substr(freitext_lage, 7001, 10500),
     freitext_wg_leben_1 = substr(freitext_wg_leben, 1, 3500),
     freitext_wg_leben_2 = substr(freitext_wg_leben, 3501, 7000),
+    freitext_wg_leben_3 = substr(freitext_wg_leben, 7001, 10500),
     freitext_sonstiges_1 = substr(freitext_sonstiges, 1, 3500),
-    freitext_sonstiges_2 = substr(freitext_sonstiges, 3501, 7000)
+    freitext_sonstiges_2 = substr(freitext_sonstiges, 3501, 7000),
+    freitext_sonstiges_3 = substr(freitext_sonstiges, 7001, 10500)
   ) %>%
   select(-freitext_zimmer,-freitext_lage,
          -freitext_wg_leben,-freitext_sonstiges)
 
 flog.info("%s Freitextfelder getrimmt",
           sum(
-            sum(nchar(Analysedaten_clean$freitext_zimmer_2) == 3500, na.rm = T),
-            sum(nchar(Analysedaten_clean$freitext_lage_2) == 3500, na.rm = T),
-            sum(nchar(Analysedaten_clean$freitext_wg_leben_2) == 3500, na.rm = T),
-            sum(nchar(Analysedaten_clean$freitext_sonstiges_2) == 3500, na.rm = T)
+            sum(nchar(Analysedaten_clean$freitext_zimmer_3) == 3500, na.rm = T),
+            sum(nchar(Analysedaten_clean$freitext_lage_3) == 3500, na.rm = T),
+            sum(nchar(Analysedaten_clean$freitext_wg_leben_3) == 3500, na.rm = T),
+            sum(nchar(Analysedaten_clean$freitext_sonstiges_3) == 3500, na.rm = T)
             )
          )
 

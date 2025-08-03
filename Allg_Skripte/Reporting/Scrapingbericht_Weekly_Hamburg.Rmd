@@ -154,21 +154,34 @@ St_Teile <- as.data.frame(Geodaten_Stadtteile) %>%
 
 Wochenreferenz <- Daten_Hamburg %>%
   filter(datum_scraping >= Sys.Date() - 13 &
-         datum_scraping <= Sys.Date() - 7) %>%
+           datum_scraping <= Sys.Date() - 7) %>%
   mutate(New_Date = datum_scraping + 7) %>%
   group_by(New_Date) %>%
   summarise(Anzahl = n())
 
+Label <- Daten_Hamburg %>%
+  filter(datum_scraping > Sys.Date() - 7) %>%
+  group_by(datum_scraping) %>%
+  summarise(Anzahl = n()) %>%
+  left_join(Wochenreferenz %>% rename(datum_scraping = New_Date), 
+            by = "datum_scraping") %>%
+  mutate(y = Anzahl.x/2,
+         y = if_else(y < 10, y+20, y),
+         label = round((Anzahl.x-Anzahl.y)/Anzahl.y*100,1),
+         label = ifelse(label > 0, paste0("+", label), label),
+         label = ifelse(!is.na(label), paste0(label, "%"), NA))
 
 Daten_Hamburg %>%
   filter(datum_scraping >= Sys.Date() - 6) %>%
   group_by(datum_scraping) %>%
   summarise(Anzahl = n()) %>%
-
+  
   ggplot(aes(x = datum_scraping, y = Anzahl)) +
   geom_col(data = Wochenreferenz, aes(x=New_Date, y=Anzahl), 
            inherit.aes = F, fill = "grey") +
   geom_col(fill = "steelblue", width = 0.65) +
+  geom_text(data = Label, aes(x = datum_scraping, y = y, label = label),
+            size = 3, colour = "white") +
   scale_x_date(date_breaks = "1 day", date_labels = "%d. %B / %a") +
   labs(title = NULL, x = NULL, y = NULL) +
   theme_minimal()
@@ -180,8 +193,8 @@ Daten_Hamburg %>%
 ## Ergebnis der Scrapingloops
 
 -   Die meisten Wohnungsangebote wurden in dieser Woche um **[`r log_daten_gesamt_hamburg %>% mutate(Links_gescraped = ifelse(Scraping_Status == 0, as.integer(str_match(Ergebnis_letzter_DL, "^Scraping erfolgreich: (\\d+) Link\\(s\\)$")[, 2]), 0)) %>%  group_by(Uhrzeit) %>% summarize(Sum = sum(Links_gescraped, na.rm = TRUE)) %>% slice_max(Sum, n = 1) %>% pull(Uhrzeit) `]{style="color: #766e63;"}** Uhr gescraped; die<br>wenigsten um **[`r log_daten_gesamt_hamburg %>% mutate(Links_gescraped = ifelse(Scraping_Status == 0, as.integer(str_match(Ergebnis_letzter_DL, "^Scraping erfolgreich: (\\d+) Link\\(s\\)$")[, 2]), 0)) %>%  group_by(Uhrzeit) %>% summarize(Sum = sum(Links_gescraped, na.rm = TRUE)) %>% slice_min(Sum, n = 1) %>% pull(Uhrzeit)`]{style="color: #766e63;"}** Uhr.
--  Vollständig erfolgreiche Scrapingloops traten um [**`r log_daten_gesamt_hamburg %>% group_by(Uhrzeit, Scraping_Status) %>% summarise(count = n(), .groups = "drop") %>% filter(Scraping_Status == 0) %>% slice_max(count, n = 1) %>% pull(Uhrzeit)`**]{style="color: green;"} Uhr am häufigsten auf. Um [**`r log_daten_gesamt_hamburg %>% group_by(Uhrzeit, Scraping_Status) %>% summarise(count = n(), .groups = "drop") %>% filter(Scraping_Status == 2) %>% slice_max(count, n = 1) %>% pull(Uhrzeit)`**]{style="color: red;"}<br>Uhr scheiteren trotz neuer Links die meisten Scrapingloops.
--  Von den Scrapingzyklen mit neuen Links waren [**`r nrow(log_daten_gesamt_hamburg %>% filter(Scraping_Status == 0))`**]{style="color: green;"} Loops vollständig erfolgreich, [**`r nrow(log_daten_gesamt_hamburg %>% filter(Scraping_Status == 1))`**]{style="color: orange;"} teilweise<br>erfolgreich und bei [**`r nrow(log_daten_gesamt_hamburg %>% filter(Scraping_Status == 2))`**]{style="color: red;"} der Loops keine Datenabfragen möglich.
+-  Vollständig erfolgreiche Scrapingloops traten um [**`r log_daten_gesamt_hamburg %>% group_by(Uhrzeit, Scraping_Status) %>% summarise(count = n(), .groups = "drop") %>% filter(Scraping_Status == 0) %>% slice_max(count, n = 1) %>% pull(Uhrzeit)`**]{style="color: #84b884;"} Uhr am häufigsten auf. Um [**`r log_daten_gesamt_hamburg %>% group_by(Uhrzeit, Scraping_Status) %>% summarise(count = n(), .groups = "drop") %>% filter(Scraping_Status == 2) %>% slice_max(count, n = 1) %>% pull(Uhrzeit)`**]{style="color: #d97c7c;"}<br>Uhr scheiteren trotz neuer Links die meisten Scrapingloops.
+-  Von den Scrapingzyklen mit neuen Links waren [**`r nrow(log_daten_gesamt_hamburg %>% filter(Scraping_Status == 0))`**]{style="color: #84b884;"} Loops vollständig erfolgreich, [**`r nrow(log_daten_gesamt_hamburg %>% filter(Scraping_Status == 1))`**]{style="color: #f1a765;"} teilweise<br>erfolgreich und bei [**`r nrow(log_daten_gesamt_hamburg %>% filter(Scraping_Status == 2))`**]{style="color: #d97c7c;"} der Loops keine Datenabfragen möglich.
 
 
 ```{r plot2, include=TRUE, fig.height=4, fig.width=7}
