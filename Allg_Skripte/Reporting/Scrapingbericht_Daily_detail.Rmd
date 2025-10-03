@@ -1,6 +1,9 @@
 ---
-title: Scraping WG-Gesucht
-output: html_document
+title: "Tagesreport WG-Scraper"
+date: "`r Sys.Date()`"
+output: 
+  html_document: 
+    theme: journal
 ---
 
 ```{r setup, include=FALSE}
@@ -10,14 +13,42 @@ library(tidyverse)
 library(knitr)
 library(kableExtra)
 library(here)
+library(DBI)
+library(futile.logger)
+library(glue)
+
+stadt <- "Berlin"
 
 ```
 
+
 ```{r Analysedaten}
 
+tryCatch({
+  
+  con <- dbConnect(odbc::odbc(),
+                   Driver = "SQL Server",
+                   Server = Sys.getenv("DB_SERVER"),
+                   Database = Sys.getenv("DB_NAME"),
+                   Trusted_Connection = "Yes",
+                   Encrypt = "No")
+  flog.info("SQL-Verbindung hergestellt")
+  
+}, error = function(e) {
+  
+  flog.error("Fehler bei SQL-Verbindung: %s", e$message)
+  
+})
 
-Daten_Hamburg <- read_csv("C:\\Users\\Fabian Hellmold\\Desktop\\WG-Gesucht-Scraper\\Hamburg\\Daten\\Analysedaten\\Analysedaten.csv",
-                          show_col_types = FALSE)
+sql <- glue_sql("
+  SELECT *
+  FROM analysedaten
+  WHERE stadt = {stadt}
+    AND CAST(datum_scraping AS date) >= CAST(DATEADD(day, -7, GETDATE()) AS date)
+    AND CAST(datum_scraping AS date) <= CAST(GETDATE() AS date)
+", .con = con)
+
+Daten_ges <- dbGetQuery(con, sql)
 
 
 ```
@@ -71,11 +102,11 @@ extract_log_loops <- function(log_path) {
 
 
 
-log_pfade_hamburg <- c(
-  "C:/Users/Fabian Hellmold/Desktop/WG-Gesucht-Scraper/Hamburg/Logs"
+log_pfade_stadt <- c(
+  glue("C:/Users/Fabian Hellmold/Desktop/WG-Gesucht-Scraper/{stadt}/Logs")
 )
 
-logs_heute_hamburg <- map(log_pfade_hamburg, function(pfad) {
+logs_heute_stadt <- map(log_pfade_stadt, function(pfad) {
   list.files(
     path = pfad,
     pattern = paste0("Log_\\w+ ", format(Sys.Date(), "%d.%m.%Y"), " \\{\\d+\\}\\.txt"),
@@ -85,7 +116,7 @@ logs_heute_hamburg <- map(log_pfade_hamburg, function(pfad) {
 
 
 
-log_daten_gesamt_hamburg <- map_dfr(logs_heute_hamburg, extract_log_loops) %>%
+log_daten_gesamt_stadt <- map_dfr(logs_heute_stadt, extract_log_loops) %>%
   rowwise() %>%
   mutate(
     letzter_dl = {
@@ -116,17 +147,17 @@ log_daten_gesamt_hamburg <- map_dfr(logs_heute_hamburg, extract_log_loops) %>%
 
 ```
 
-Automatischer Scrapingreport vom [`r format(Sys.time(), "%d.%m.%Y")`]{style="color: orange;"} für Anzeigen von WG-Zimmern in Hamburg <br>
 
 ## Anzahl gescrapter Anzeigen
 
--   Heute wurden **`r Daten_Hamburg %>% filter(datum_scraping == Sys.Date()) %>% nrow()`** Angebote gescrapt. Letzte Woche waren es am selben Wochentag **`r Daten_Hamburg %>% filter(datum_scraping == Sys.Date()-7) %>% nrow()`** Angebote. 
+-   Heute wurden **`r Daten_ges %>% filter(datum_scraping == Sys.Date()) %>% nrow()`** Angebote gescrapt. Letzte Woche waren es am selben Wochentag **`r Daten_ges %>% filter(datum_scraping == Sys.Date()-7) %>% nrow()`** Angebote. 
 
 <div style="margin-bottom: -10px;"></div>
 
 ```{r plot, include=TRUE, fig.height=2.5, fig.width=6}
 
-Daten_Hamburg %>%
+Daten_ges %>%
+  mutate(datum_scraping = as.Date(datum_scraping)) %>%
   filter(datum_scraping >= Sys.Date() - 7) %>%
   group_by(datum_scraping) %>%
   summarise(Anzahl = n()) %>%
@@ -135,7 +166,7 @@ Daten_Hamburg %>%
   ggplot(aes(x = datum_scraping, y = Anzahl, fill = Heute)) +
     geom_col(show.legend = F) +
     scale_fill_manual(values = c("FALSE" = "steelblue", "TRUE" = "tomato")) +
-    scale_x_date(date_breaks = "1 day", date_labels = "%a %d. %B") +
+    scale_x_date(date_breaks = "1 day", date_labels = "%a %d. %b") +
     labs(
     title = "",
     x = "",
@@ -149,15 +180,15 @@ Daten_Hamburg %>%
 Von den heutigen Scrapingzyklen mit neuen Links waren ...
 <div style="margin-bottom: -0px;"></div>
 
--   [**`r nrow(log_daten_gesamt_hamburg %>% filter(Scraping_Status == 0))`**]{style="color: green;"} der Loops vollständig erfolgreich.
--   [**`r nrow(log_daten_gesamt_hamburg %>% filter(Scraping_Status == 1))`**]{style="color: orange;"} teilweise erfolgreich.
--   bei [**`r nrow(log_daten_gesamt_hamburg %>% filter(Scraping_Status == 2))`**]{style="color: red;"} der Loops keine Datenabfragen möglich.
+-   [**`r nrow(log_daten_gesamt_stadt %>% filter(Scraping_Status == 0))`**]{style="color: green;"} der Loops vollständig erfolgreich.
+-   [**`r nrow(log_daten_gesamt_stadt %>% filter(Scraping_Status == 1))`**]{style="color: orange;"} teilweise erfolgreich.
+-   bei [**`r nrow(log_daten_gesamt_stadt %>% filter(Scraping_Status == 2))`**]{style="color: red;"} der Loops keine Datenabfragen möglich.
 
 <div style="margin-bottom: 20px;"></div>
 
 ```{r echo=FALSE, include = TRUE, results='asis', fig.width= 4}
 
-scraping_matrix <- log_daten_gesamt_hamburg %>%
+scraping_matrix <- log_daten_gesamt_stadt %>%
   mutate(
     Uhrzeit = paste0("Scraping ", Uhrzeit),
     Seite   = paste0("Seite ", Seite),
@@ -190,9 +221,9 @@ scraping_matrix <- log_daten_gesamt_hamburg %>%
 kable(scraping_matrix, escape = FALSE, format = "html",
       table.attr = "style='margin-left: 0; margin-right: 0'") %>%
   column_spec(1, width = "80px", extra_css = "border-right: 2px solid #000; padding-left: 8px;
-              background-color: #f8f5f2; font-size: 11px;") %>% 
-  column_spec(2:6, width = "80px",
-              extra_css = "background-color: #f8f5f2; font-size: 11px;") %>% 
+               background-color: #f8f5f2; font-size: 11px;") %>% 
+  column_spec(2:ncol(scraping_matrix), width = "80px",
+               extra_css = "background-color: #f8f5f2; font-size: 11px;") %>% 
   row_spec(1, extra_css = "border-top: 2px solid #000; padding-left: 8px; line-height: 1.35;") %>% 
   row_spec(2:nrow(scraping_matrix),
            extra_css = "border-top: 2px solid #f8f5f2; padding-left: 8px; line-height: 1.35;") %>%
