@@ -89,58 +89,19 @@ extract_log_loops <- function(log_path) {
 }
 
 
-log_pfade_grade <- c(
+log_pfade <- c(
   "C:/Users/Fabian Hellmold/Desktop/WG-Gesucht-Scraper/Bremen/Logs",
   "C:/Users/Fabian Hellmold/Desktop/WG-Gesucht-Scraper/Hamburg/Logs",
   "C:/Users/Fabian Hellmold/Desktop/WG-Gesucht-Scraper/Kassel/Logs",
-  "C:/Users/Fabian Hellmold/Desktop/WG-Gesucht-Scraper/Leipzig/Logs"
-)
-
-logs_heute_grade <- map(log_pfade_grade, function(pfad) {
-  list.files(
-    path = pfad,
-    pattern = paste0("Log_\\w+ ", format(Sys.Date(), "%d.%m.%Y"), " \\{\\d+\\}\\.txt"),
-    full.names = TRUE
-  )
-}) %>% unlist()
-
-
-log_daten_gesamt_grade <- map_dfr(logs_heute_grade, extract_log_loops) %>%
-  rowwise() %>%
-  mutate(
-    letzter_dl = {
-      durchläufe <- paste0("DL", 5:1)
-      letzter <- NA_character_
-      for (dl in durchläufe) {
-        if (!is.na(get(paste0(dl, "_Ergebnis")))) {
-          letzter <- dl
-          break
-        }
-      }
-      letzter
-    },
-    Ergebnis_letzter_DL = if (!is.na(letzter_dl)) get(paste0(letzter_dl, "_Ergebnis")) else NA_character_
-  ) %>%
-  ungroup() %>%
-  select(Stadt, Datum, Uhrzeit, Seite, Letzter_Durchlauf = letzter_dl, Ergebnis_letzter_DL) %>%
-  mutate(
-    Scraping_Status = case_when(
-      str_detect(Ergebnis_letzter_DL, "Keine neuen Links") ~ 3,
-      str_detect(Ergebnis_letzter_DL, "Fehler") ~ 2,
-      str_detect(Ergebnis_letzter_DL, "Kein Scraping") ~ 2,
-      str_detect(Ergebnis_letzter_DL, "Teilweise Scrapingfehler") ~ 1,
-      str_detect(Ergebnis_letzter_DL, "Scraping erfolgreich") ~ 0,
-      TRUE ~ NA_real_)
-    ) 
-
-
-log_pfade_ungrade <- c(
+  "C:/Users/Fabian Hellmold/Desktop/WG-Gesucht-Scraper/Leipzig/Logs",
   "C:/Users/Fabian Hellmold/Desktop/WG-Gesucht-Scraper/München/Logs",
   "C:/Users/Fabian Hellmold/Desktop/WG-Gesucht-Scraper/Berlin/Logs",
-  "C:/Users/Fabian Hellmold/Desktop/WG-Gesucht-Scraper/Wien/Logs"
-)
+  "C:/Users/Fabian Hellmold/Desktop/WG-Gesucht-Scraper/Wien/Logs",
+  "C:/Users/Fabian Hellmold/Desktop/WG-Gesucht-Scraper/Zürich/Logs",
+  "C:/Users/Fabian Hellmold/Desktop/WG-Gesucht-Scraper/Hannover/Logs"
+  )
 
-logs_heute_ungrade <- map(log_pfade_ungrade, function(pfad) {
+logs_heute <- map(log_pfade, function(pfad) {
   list.files(
     path = pfad,
     pattern = paste0("Log_\\w+ ", format(Sys.Date(), "%d.%m.%Y"), " \\{\\d+\\}\\.txt"),
@@ -149,7 +110,7 @@ logs_heute_ungrade <- map(log_pfade_ungrade, function(pfad) {
 }) %>% unlist()
 
 
-log_daten_gesamt_ungrade <- map_dfr(logs_heute_ungrade, extract_log_loops) %>%
+log_daten_gesamt <- map_dfr(logs_heute, extract_log_loops) %>%
   rowwise() %>%
   mutate(
     letzter_dl = {
@@ -177,8 +138,6 @@ log_daten_gesamt_ungrade <- map_dfr(logs_heute_ungrade, extract_log_loops) %>%
       TRUE ~ NA_real_)
     ) 
 
-
-logdaten_gesamt_gradeungrade <- rbind(log_daten_gesamt_grade, log_daten_gesamt_ungrade)
 
 ```
 
@@ -190,7 +149,7 @@ logdaten_gesamt_gradeungrade <- rbind(log_daten_gesamt_grade, log_daten_gesamt_u
 
 <div style="margin-bottom: -10px;"></div>
 
-```{r plot, include=TRUE, fig.height=1.5, fig.width=3.75}
+```{r plot, include=TRUE}
 
 Daten_ges <- rbind(Daten_Hamburg, Daten_Kassel, Daten_Bremen, Daten_Leipzig, 
                    Daten_München, Daten_Wien, Daten_Berlin)
@@ -232,16 +191,19 @@ Daten_ges %>%
 Von den heutigen Scrapingzyklen mit neuen Links waren
 <div style="margin-bottom: 2px;"></div>
 
--   [**`r nrow(logdaten_gesamt_gradeungrade %>% filter(Scraping_Status == 0))`**]{style="color: #84b884;"} der Loops vollständig erfolgreich.
--   [**`r nrow(logdaten_gesamt_gradeungrade %>% filter(Scraping_Status == 1))`**]{style="color: #f1a765;"} nur teilweise erfolgreich.
--   bei [**`r nrow(logdaten_gesamt_gradeungrade %>% filter(Scraping_Status == 2))`**]{style="color: #d97c7c;"} der Loops keine Datenabfragen möglich.
+-   [**`r nrow(log_daten_gesamt %>% filter(Scraping_Status == 0))`**]{style="color: #84b884;"} der Loops vollständig erfolgreich.
+-   [**`r nrow(log_daten_gesamt %>% filter(Scraping_Status == 1))`**]{style="color: #f1a765;"} nur teilweise erfolgreich.
+-   bei [**`r nrow(log_daten_gesamt %>% filter(Scraping_Status == 2))`**]{style="color: #d97c7c;"} der Loops keine Datenabfragen möglich.
 
 <div style="margin-bottom: 20px;"></div>
 
-```{r echo=FALSE, include = TRUE, results='asis', fig.height=3.5, fig.width= 3.75}
+```{r echo=FALSE, include = TRUE, results='asis'}
 
 
-log_daten_gesamt_grade %>%
+log_daten_gesamt %>% 
+  mutate(Stadt = factor(Stadt, levels = c("Zürich",  "Wien", "Berlin", "München", 
+                                          "Hamburg", "Hannover", "Leipzig",
+                                          "Bremen", "Kassel"))) %>%
 
 ggplot(aes(x = Seite, y = 1, fill = as.factor(Scraping_Status))) +  
   geom_tile(color = "white", linewidth = 0.3, height = 0.8) +
@@ -251,7 +213,7 @@ ggplot(aes(x = Seite, y = 1, fill = as.factor(Scraping_Status))) +
                "2" = "#d97c7c", "3" = "#cfcfcf"),
     labels = c("0" = "Erfolgreich", "1" = "TW Erfolgreich",
                "2" = "Fehler", "3" = "Keine neuen Anzeigen")) +
-  facet_grid(Uhrzeit ~ Stadt, switch = "both") +
+  facet_grid(Stadt ~ Uhrzeit, switch = "both", scales = "free_y") +
   labs(title = NULL, x = NULL, y = NULL) +
   theme_minimal() +
   theme(
@@ -270,32 +232,32 @@ ggplot(aes(x = Seite, y = 1, fill = as.factor(Scraping_Status))) +
 
 <br>
 
-```{r echo=FALSE, include = TRUE, results='asis', fig.height=3.5, fig.width= 3.75}
+```{r echo=FALSE, include = FALSE, results='asis', fig.height=3.5, fig.width= 3.75}
 
 
-log_daten_gesamt_ungrade %>%
-
-ggplot(aes(x = Seite, y = 1, fill = as.factor(Scraping_Status))) +  
-  geom_tile(color = "white", linewidth = 0.3, height = 0.8) +
-  scale_fill_manual(
-    name = "", 
-    values = c("0" = "#84b884", "1" = "#f1a765",
-               "2" = "#d97c7c", "3" = "#cfcfcf"),
-    labels = c("0" = "Erfolgreich", "1" = "TW Erfolgreich",
-               "2" = "Fehler", "3" = "Keine neuen Anzeigen")) +
-  facet_grid(Uhrzeit ~ Stadt, switch = "both", scales = "free_x") +
-  labs(title = NULL, x = NULL, y = NULL) +
-  theme_minimal() +
-  theme(
-    axis.text = element_blank(),
-    strip.placement = "outside",
-    legend.position = "none",
-    strip.background = element_rect(fill = "#f8f5f2", color = "black"), 
-    strip.text = element_text(face = "bold", size = 10), 
-    strip.text.y.left = element_text(angle = 0),
-    strip.text.x.bottom = element_text(margin = margin(t=5, b=5, l=5, r=5)),
-    panel.grid = element_blank()
-  )
+# log_daten_gesamt_ungrade %>%
+# 
+# ggplot(aes(x = Seite, y = 1, fill = as.factor(Scraping_Status))) +  
+#   geom_tile(color = "white", linewidth = 0.3, height = 0.8) +
+#   scale_fill_manual(
+#     name = "", 
+#     values = c("0" = "#84b884", "1" = "#f1a765",
+#                "2" = "#d97c7c", "3" = "#cfcfcf"),
+#     labels = c("0" = "Erfolgreich", "1" = "TW Erfolgreich",
+#                "2" = "Fehler", "3" = "Keine neuen Anzeigen")) +
+#   facet_grid(Uhrzeit ~ Stadt, switch = "both", scales = "free_x") +
+#   labs(title = NULL, x = NULL, y = NULL) +
+#   theme_minimal() +
+#   theme(
+#     axis.text = element_blank(),
+#     strip.placement = "outside",
+#     legend.position = "none",
+#     strip.background = element_rect(fill = "#f8f5f2", color = "black"), 
+#     strip.text = element_text(face = "bold", size = 10), 
+#     strip.text.y.left = element_text(angle = 0),
+#     strip.text.x.bottom = element_text(margin = margin(t=5, b=5, l=5, r=5)),
+#     panel.grid = element_blank()
+#   )
 
 
 ```
