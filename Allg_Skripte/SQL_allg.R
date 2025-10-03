@@ -31,7 +31,7 @@ con <- dbConnect(odbc::odbc(),
 # Neue Tabelle anlegen ---------------------------------------------------------
 
 
-dbExecute(con, "DROP TABLE IF EXISTS analysedaten")
+# dbExecute(con, "DROP TABLE IF EXISTS analysedaten")
 
 dbExecute(con, "
 CREATE TABLE analysedaten (
@@ -116,7 +116,6 @@ Analysedaten_clean <- Analysedaten_neu_geo %>%
 
 dbWriteTable(con, "testdaten", Analysedaten_clean,
              append = TRUE)
-
 
 testdaten <- dbReadTable(con, "analysedaten")
 
