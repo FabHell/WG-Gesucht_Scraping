@@ -1,0 +1,222 @@
+---
+title: "Tagesreport WG-Scraper"
+date: "`r Sys.Date()`"
+output: 
+  html_document: 
+    theme: journal
+---
+
+
+```{r setup, include=FALSE}
+
+knitr::opts_chunk$set(echo = F, include = F, warning = F, message = F)
+
+library(tidyverse)
+library(patchwork)
+library(ggtext)
+library(sf)
+library(DBI)
+library(futile.logger)
+library(glue)
+
+alle_staedte <- c("Wien", "München", "Berlin", "Hannover", "Kassel", "Hamburg", 
+                  "Leipzig", "Bremen", "Kiel", "Erfurt", "Rostock", "Zürich")
+
+
+```
+
+
+
+```{r daten_anzeigen}
+
+
+tryCatch({
+  
+  con <- dbConnect(odbc::odbc(),
+                   Driver = "SQL Server",
+                   Server = Sys.getenv("DB_SERVER"),
+                   Database = Sys.getenv("DB_NAME"),
+                   Trusted_Connection = "Yes",
+                   Encrypt = "No")
+  flog.info("SQL-Verbindung hergestellt")
+  
+}, error = function(e) {
+  
+  flog.error("Fehler bei SQL-Verbindung: %s", e$message)
+  
+})
+
+sql <- glue_sql("
+  SELECT *
+  FROM analysedaten
+  WHERE CAST(datum_scraping AS date) = CAST(GETDATE() AS date)
+     OR CAST(datum_scraping AS date) = CAST(DATEADD(day, -7, GETDATE()) AS date)
+", .con = con)
+
+Daten_ges <- dbGetQuery(con, sql)
+
+
+Wochenreferenz <- Daten_ges %>%
+  mutate(datum_scraping = as.Date(datum_scraping)) %>%
+  group_by(stadt, datum_scraping) %>%
+  summarise(Anzahl = n(), .groups = "drop") %>%
+  complete(stadt = alle_staedte,
+           datum_scraping = c(Sys.Date(), Sys.Date() - 7),
+           fill = list(Anzahl = 0)) %>%
+  mutate(datum_scraping = ifelse(datum_scraping == Sys.Date(), "heute", "vor_7_tagen")) %>%
+  pivot_wider(names_from = datum_scraping, values_from = Anzahl,
+              values_fill = 0) %>%
+  mutate(veraenderung = ifelse(vor_7_tagen == 0, NA, (heute - vor_7_tagen) / vor_7_tagen * 100))
+
+
+```
+
+
+
+```{r daten_logs}
+
+
+extract_log_loops <- function(log_path) {
+  lines <- readLines(log_path, encoding = "UTF-8")
+  
+  stadt <- str_match(log_path, "Log_([^ ]+) ")[,2]
+  
+  file_info <- str_match(basename(log_path), "(\\d{2}\\.\\d{2}\\.\\d{4}) \\{(\\d{1,2})\\}\\.txt")
+  datum <- dmy(file_info[2])
+  uhrzeit <- sprintf("%02d:00", as.integer(file_info[3]))
+  
+  loop_start_idx <- which(str_detect(lines, "Starte Loop"))
+  loop_blocks <- map2(loop_start_idx, lead(loop_start_idx, default = length(lines)), \(start, end) {
+    lines[start:(end - 1)]
+  })
+  
+  map_dfr(loop_blocks, function(block) {
+    block_text <- paste(block, collapse = "\n")
+    seite <- as.integer(str_match(block_text, "S\\.(\\d+)")[,2])
+    
+    max_dl <- 5
+    out <- tibble(
+      Stadt = stadt,
+      Datum = datum,
+      Uhrzeit = uhrzeit,
+      Seite = seite
+    )
+    
+    for (i in 1:max_dl) {
+      proxy_pattern <- sprintf("S\\.%d \\| DL%d / Proxy: ([\\d\\.]+:\\d+)", seite, i)
+      proxy <- str_match(block_text, proxy_pattern)[,2]
+      
+      result_pattern <- sprintf(
+        "S\\.%d \\| DL%d / (Scraping erfolgreich: \\d+ Link\\(s\\)|Fehler: .+|Keine neuen Links|Kein Scraping|Teilweise Scrapingfehler: .+)",
+        seite, i
+      )
+      result <- str_match(block_text, result_pattern)[,2]
+      
+      out[[paste0("DL", i, "_Proxy")]] <- proxy
+      out[[paste0("DL", i, "_Ergebnis")]] <- result
+    }
+    
+    out
+  })
+}
+
+
+logs_heute <- alle_staedte %>%
+  map(function(stadt) {
+    list.files(
+      path = file.path("C:/Users/Fabian Hellmold/Desktop/WG-Gesucht-Scraper", stadt, "Logs"),
+      pattern = paste0("Log_", stadt, " ", format(Sys.Date(), "%d.%m.%Y"), " \\{\\d+\\}\\.txt"),
+      full.names = TRUE
+    )
+  }) %>%
+  unlist()
+
+
+log_daten_gesamt <- map_dfr(logs_heute, extract_log_loops) %>%
+  rowwise() %>%
+  mutate(
+    letzter_dl = {
+      durchläufe <- paste0("DL", 5:1)
+      letzter <- NA_character_
+      for (dl in durchläufe) {
+        if (!is.na(get(paste0(dl, "_Ergebnis")))) {
+          letzter <- dl
+          break
+        }
+      }
+      letzter
+    },
+    Ergebnis_letzter_DL = if (!is.na(letzter_dl)) get(paste0(letzter_dl, "_Ergebnis")) else NA_character_
+  ) %>%
+  ungroup() %>%
+  select(Stadt, Datum, Uhrzeit, Seite, Letzter_Durchlauf = letzter_dl, Ergebnis_letzter_DL) %>%
+  mutate(
+    Scraping_Status = case_when(
+      str_detect(Ergebnis_letzter_DL, "Keine neuen Links") ~ 3,
+      str_detect(Ergebnis_letzter_DL, "Fehler") ~ 2,
+      str_detect(Ergebnis_letzter_DL, "Kein Scraping") ~ 2,
+      str_detect(Ergebnis_letzter_DL, "Teilweise Scrapingfehler") ~ 1,
+      str_detect(Ergebnis_letzter_DL, "Scraping erfolgreich") ~ 0,
+      TRUE ~ NA_real_
+    )
+  )
+
+
+```
+
+
+
+
+```{r abbildung, include=TRUE, fig.height=7, fig.width=4.5}
+
+
+Abb1 <- log_daten_gesamt %>%
+  group_by(Stadt, Scraping_Status) %>%
+  summarise(count = n(), .groups = "drop") %>%
+  mutate(Scraping_Status = factor(Scraping_Status)) %>%
+  
+  ggplot(aes(x = Scraping_Status, y = 1, fill = Scraping_Status)) +
+  geom_tile(color = "black", width = 0.9, height = 0.9, show.legend = FALSE) +
+  geom_text(aes(label = count), color = "black", size = 2.5) +
+  scale_fill_manual(values = c("0" = "#84b884", "1" = "#f1a765",
+                               "2" = "#d97c7c", "3" = "#cfcfcf")) +
+  facet_wrap(~ Stadt, ncol = 1, strip.position = "left") +
+  labs(x = NULL, y = NULL, fill = NULL) +
+  theme_minimal() +
+  theme(
+    axis.text = element_blank(),
+    axis.ticks = element_blank(),
+    panel.grid = element_blank(),
+    strip.background = element_blank(),
+    strip.text = element_text(size = 8, face = "bold")
+  )
+
+
+Abb2 <- ggplot(Wochenreferenz, aes(y = stadt, x = veraenderung)) +
+  geom_linerange(aes(xmin = 0, xmax = veraenderung, color = veraenderung > 0),
+                 linewidth = 7.5) +
+  geom_richtext(aes(x = 140, label = paste0(vor_7_tagen, " / ", heute)), 
+                size = 3, color = "gray20", fill = "#f8f5f2", fontface = "bold") +
+  geom_vline(xintercept = 0, linetype = "dashed", color = "gray40") +
+  facet_wrap(~stadt, ncol = 1, scales = "free_y") +
+  scale_x_continuous(limits = c(-110, 160),
+                     breaks = seq(-100, 100, 50),
+                     labels = function(x) paste0(x, "%")) +
+  scale_color_manual(values = c("TRUE" = "steelblue", "FALSE" = "tomato")) +
+  theme_minimal() +
+  theme(
+    legend.position = "none",
+    strip.text = element_blank(),
+    axis.text.y = element_blank(),
+    axis.ticks.y = element_blank()
+  ) +
+  labs(x = NULL, y = NULL, color = NULL)
+
+
+Abb1 + Abb2 +
+  plot_layout(nrow = 1, widths = c(0.4, 1))
+
+
+```
+
+
