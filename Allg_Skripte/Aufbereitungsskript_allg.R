@@ -1,10 +1,9 @@
 
 
-
 ################################################################################
 ################################################################################
 #####                                                                      #####
-#####               AUFBEREITUNG VON WG-GESUCHT HAMBURG - AUTO             #####
+#####                   AUFBEREITUNG VON WG-GESUCHT - AUTO                 #####
 #####                                                                      #####
 ################################################################################
 ################################################################################
@@ -49,9 +48,9 @@ Analysedaten_neu <- Rohdaten_neu_gefiltert %>%
          zimmergröße = str_remove(zimmergröße, "m²"),
          zimmergröße = as.numeric(zimmergröße),
          
-         gesamtmiete = case_when(land == "Deutschland" ~ str_extract(zimmergröße_gesamtmiete, "\\d{1,4}€"),
+         gesamtmiete = case_when(land != "Schweiz" ~ str_extract(zimmergröße_gesamtmiete, "\\d{1,4}€"),
                                  land == "Schweiz" ~ str_extract(zimmergröße_gesamtmiete, "\\d{1,4}CHF")),
-         gesamtmiete = case_when(land == "Deutschland" ~ str_remove(gesamtmiete, "€"),
+         gesamtmiete = case_when(land != "Schweiz" ~ str_remove(gesamtmiete, "€"),
                                  land == "Schweiz" ~ str_remove(gesamtmiete, "CHF")),
          gesamtmiete = as.numeric(gesamtmiete)) %>%
   
@@ -100,12 +99,13 @@ Analysedaten_neu <- Rohdaten_neu_gefiltert %>%
   
   select(-wg_details) %>%
   
-  mutate(straße = str_split(adresse, "\\s{3,}", simplify = TRUE)[,1],
-         
-         plz_stadtteil = str_split(adresse, "\\s{3,}", simplify = TRUE)[,2],
-         plz_stadtteil = str_remove(plz_stadtteil, paste0(stadt, " ")),
-         postleitzahl = str_extract(plz_stadtteil, "\\b\\d{4,5}\\b"),
-         stadtteil = str_remove(plz_stadtteil, "\\b\\d{4,5}\\b\\s*")) %>%
+  mutate(
+    straße = str_split(adresse, "\\s{3,}", simplify = TRUE)[,1],
+    plz_stadtteil = str_split(adresse, "\\s{3,}", simplify = TRUE)[,2],
+    plz_stadtteil = str_remove(plz_stadtteil, fixed(paste0(stadt, " "))),
+    postleitzahl = str_extract(plz_stadtteil, "\\b\\d{4,5}\\b"),
+    stadtteil = str_remove(plz_stadtteil, "\\b\\d{4,5}\\b\\s*")
+  ) %>%
   
   select(-plz_stadtteil) %>%
   
@@ -181,38 +181,50 @@ St_Teile <- tibble(Geodaten_Stadtteile) %>%
 Geocoding_Stadtteile <- Analysedaten_neu %>%
   filter(!(stadtteil %in% St_Teile))
 
+
+## Geocoding durchführen -------------------------------------------------------
+
+tryCatch({
+  
+  Analysedaten_neu_geo <- Analysedaten_neu %>%
+    geocode(method = "osm", country = land, city = stadt,
+            postalcode = postleitzahl, street = straße) %>%
+    st_as_sf(coords = c("long", "lat"), crs = 4326, na.fail = FALSE) %>%
+    st_transform(crs = st_crs(Geodaten_Stadtteile)) %>%
+    rename(geolocation = geometry)
+  
+}, error = function(e) {
+  flog.error("Fehler beim Geocoding: %s", e$message)   
+})
+
+
+
+# Stadtteile über Geocoding hinzufügen -----------------------------------------
+
+Geocoding_Stadtteile <- Analysedaten_neu_geo %>%
+  filter(!(stadtteil %in% St_Teile))
+
 if (nrow(Geocoding_Stadtteile) > 0) {
   
-  tryCatch({
-    Geocoding_Stadtteile <- Geocoding_Stadtteile %>%
-      geocode(method = "osm", country = land, city = stadt,
-              postalcode = postleitzahl, street = straße) %>%
-      select(-stadtteil) %>%
-      st_as_sf(coords = c("long", "lat"), crs = 4326, na.fail = FALSE) %>%
-      st_transform(crs = st_crs(Geodaten_Stadtteile)) %>%
-      st_join(Geodaten_Stadtteile) %>%
-      mutate(stadtteil_quelle = case_when(!is.na(stadtteil) ~ "Geocode_OSM")) %>%
-      as.data.frame() %>%
-      select(-geometry)   
-    
-    flog.info("%d Stadtteil(e) über Geocoding ermittelt",
-              nrow(Geocoding_Stadtteile %>% filter(!is.na(stadtteil))))
-    flog.info("%d Anzeige(n) ohne gültige Stadtteilangabe",
-              nrow(Geocoding_Stadtteile %>% filter(is.na(stadtteil))))
-    
-  }, error = function(e) {
-    flog.error("Fehler beim Geocoding: %s", e$message)   
-  })
+  Geocoding_Stadtteile <- Geocoding_Stadtteile %>%
+    select(-stadtteil) %>%
+    st_join(Geodaten_Stadtteile) %>%
+    mutate(stadtteil_quelle = case_when(!is.na(stadtteil) ~ "Geocode_OSM")) 
+  
+  flog.info("%d Stadtteil(e) über Geocoding ermittelt",
+            nrow(Geocoding_Stadtteile %>% filter(!is.na(stadtteil))))
+  flog.info("%d Anzeige(n) ohne gültige Stadtteilangabe",
+            nrow(Geocoding_Stadtteile %>% filter(is.na(stadtteil))))
+  
 } else {
   flog.info("Stadtteildaten vollständig: Kein Geocoding")
 }
 
 
-
 ## Datensätze wieder verbinden -------------------------------------------------
 
 
-Analysedaten_neu_geo <- Analysedaten_neu %>%
+Analysedaten_neu_geo <- Analysedaten_neu_geo %>%
   filter(stadtteil %in% St_Teile) %>%
   mutate(stadtteil_quelle = "WG_Gesucht", .before = stadtteil) %>%
   rbind(Geocoding_Stadtteile)

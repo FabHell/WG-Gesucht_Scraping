@@ -60,7 +60,10 @@ write.csv(Analysedaten_neu_geo, paste0("C:\\Users\\Fabian Hellmold\\Desktop\\WG-
 
 Analysedaten_gesamt <- read_csv(paste0("C:\\Users\\Fabian Hellmold\\Desktop\\WG-Gesucht-Scraper\\",stadt,"\\Daten\\Analysedaten\\Analysedaten.csv"),
                                 show_col_types = FALSE) %>%
-  rbind(Analysedaten_neu_geo) 
+  rbind(Analysedaten_neu_geo %>% 
+          mutate(geolocation_wkt = ifelse(st_is_empty(geolocation), NA, st_as_text(geolocation))) %>%
+          st_drop_geometry() %>%
+          rename(geolocation = geolocation_wkt)) 
 
 write.csv(Analysedaten_gesamt, paste0("C:\\Users\\Fabian Hellmold\\Desktop\\WG-Gesucht-Scraper\\",stadt,"\\Daten\\Analysedaten\\Analysedaten.csv"), 
           row.names = FALSE)
@@ -129,8 +132,11 @@ Analysedaten_clean <- Analysedaten_neu_geo %>%
     freitext_sonstiges_2 = substr(freitext_sonstiges, 3501, 7000),
     freitext_sonstiges_3 = substr(freitext_sonstiges, 7001, 10500)
   ) %>%
-  select(-freitext_zimmer,-freitext_lage,
-         -freitext_wg_leben,-freitext_sonstiges)
+  select(-freitext_zimmer, -freitext_lage,
+         -freitext_wg_leben, -freitext_sonstiges) %>%
+  mutate(geolocation_wkt = st_as_text(geolocation)) %>%
+  st_drop_geometry() %>%
+  rename(geolocation = geolocation_wkt)
 
 flog.info("%s Freitextfelder getrimmt",
           sum(
@@ -142,7 +148,7 @@ flog.info("%s Freitextfelder getrimmt",
          )
 
 
-## Anzeigen in SQL-Datenbank speichern -----------------------------------------
+## Gescrapte Variablen in SQL-Datenbank speichern ------------------------------
 
 tryCatch({
   
