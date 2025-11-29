@@ -32,11 +32,11 @@ write.csv(Rohdaten_neu_gefiltert, paste0("C:\\Users\\Fabian Hellmold\\Desktop\\W
 
 ## Speichern Roh-Gesamtdatensatz -----------------------------------------------
 
-Rohdaten_gesamt <- read_csv(paste0("C:\\Users\\Fabian Hellmold\\Desktop\\WG-Gesucht-Scraper\\",stadt,"\\Daten\\Rohdaten\\Rohdaten.csv"),
-                            show_col_types = FALSE) %>%
-  rbind(Rohdaten_neu_gefiltert)  
-
-write.csv(Rohdaten_gesamt, paste0("C:\\Users\\Fabian Hellmold\\Desktop\\WG-Gesucht-Scraper\\",stadt,"\\Daten\\Rohdaten\\Rohdaten.csv"), row.names = FALSE)
+# Rohdaten_gesamt <- read_csv(paste0("C:\\Users\\Fabian Hellmold\\Desktop\\WG-Gesucht-Scraper\\",stadt,"\\Daten\\Rohdaten\\Rohdaten.csv"),
+#                             show_col_types = FALSE) %>%
+#   rbind(Rohdaten_neu_gefiltert)  
+# 
+# write.csv(Rohdaten_gesamt, paste0("C:\\Users\\Fabian Hellmold\\Desktop\\WG-Gesucht-Scraper\\",stadt,"\\Daten\\Rohdaten\\Rohdaten.csv"), row.names = FALSE)
 
 
 flog.info("Speichern der Rohdaten erfolgreich")
@@ -52,7 +52,7 @@ flog.info("Speichern der Rohdaten erfolgreich")
 
 ## Speichern Backup Analysedaten -----------------------------------------------
 
-write.csv(Analysedaten_neu_geo, paste0("C:\\Users\\Fabian Hellmold\\Desktop\\WG-Gesucht-Scraper\\",stadt,"\\Daten\\Backup\\Analysedaten\\", analysedaten_filename), 
+write.csv(Analysedaten_neu_geo, paste0("C:\\Users\\Fabian Hellmold\\Desktop\\WG-Gesucht-Scraper\\",stadt,"\\Daten\\Backup\\Analysedaten\\", analysedaten_filename),
           row.names = FALSE)
 
 
@@ -60,10 +60,7 @@ write.csv(Analysedaten_neu_geo, paste0("C:\\Users\\Fabian Hellmold\\Desktop\\WG-
 
 Analysedaten_gesamt <- read_csv(paste0("C:\\Users\\Fabian Hellmold\\Desktop\\WG-Gesucht-Scraper\\",stadt,"\\Daten\\Analysedaten\\Analysedaten.csv"),
                                 show_col_types = FALSE) %>%
-  rbind(Analysedaten_neu_geo %>% 
-          mutate(geolocation_wkt = ifelse(st_is_empty(geolocation), NA, st_as_text(geolocation))) %>%
-          st_drop_geometry() %>%
-          rename(geolocation = geolocation_wkt)) 
+  rbind(Analysedaten_neu_geo)
 
 write.csv(Analysedaten_gesamt, paste0("C:\\Users\\Fabian Hellmold\\Desktop\\WG-Gesucht-Scraper\\",stadt,"\\Daten\\Analysedaten\\Analysedaten.csv"), 
           row.names = FALSE)
@@ -86,7 +83,7 @@ flog.info("Speichern der Analysedaten erfolgreich")
 ## Verbindung zu lokalem SQL-Server herstellen ---------------------------------
 
 tryCatch({
-  
+
   con <- dbConnect(odbc::odbc(),
                    Driver = "SQL Server",
                    Server = Sys.getenv("DB_SERVER"),
@@ -94,11 +91,11 @@ tryCatch({
                    Trusted_Connection = "Yes",
                    Encrypt = "No")
   flog.info("SQL-Verbindung hergestellt")
-  
+
 }, error = function(e) {
-  
+
   flog.error("Fehler bei SQL-Verbindung: %s", e$message)
-  
+
 })
 
 
@@ -133,10 +130,7 @@ Analysedaten_clean <- Analysedaten_neu_geo %>%
     freitext_sonstiges_3 = substr(freitext_sonstiges, 7001, 10500)
   ) %>%
   select(-freitext_zimmer, -freitext_lage,
-         -freitext_wg_leben, -freitext_sonstiges) %>%
-  mutate(geolocation_wkt = st_as_text(geolocation)) %>%
-  st_drop_geometry() %>%
-  rename(geolocation = geolocation_wkt)
+         -freitext_wg_leben, -freitext_sonstiges) 
 
 flog.info("%s Freitextfelder getrimmt",
           sum(
@@ -151,16 +145,16 @@ flog.info("%s Freitextfelder getrimmt",
 ## Gescrapte Variablen in SQL-Datenbank speichern ------------------------------
 
 tryCatch({
-  
+
   dbWriteTable(con, "analysedaten", Analysedaten_clean,
                append = TRUE)
-  
+
   flog.info("%d Anzeigen in SQL gespeichert", nrow(Analysedaten_clean))
-  
+
 }, error = function(e) {
-  
+
   flog.error("Fehler beim Speichern in  SQL: %s", e$message)
-  
+
 })
 
 

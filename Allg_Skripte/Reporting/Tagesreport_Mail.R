@@ -73,7 +73,7 @@ tryCatch({
   
   Mail_Inhalt <- envelope(
     from = Sys.getenv("POSTEO_ACCOUNTNAME"),
-    to = Sys.getenv("POSTEO_ACCOUNTNAME"),
+    to = c(Sys.getenv("empfaenger1_mail")),
     subject = "Tagesreport WG-Scraper"
   ) %>%
     html(html_inhalt)

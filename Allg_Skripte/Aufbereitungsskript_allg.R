@@ -104,7 +104,7 @@ Analysedaten_neu <- Rohdaten_neu_gefiltert %>%
     plz_stadtteil = str_split(adresse, "\\s{3,}", simplify = TRUE)[,2],
     plz_stadtteil = str_remove(plz_stadtteil, fixed(paste0(stadt, " "))),
     postleitzahl = str_extract(plz_stadtteil, "\\b\\d{4,5}\\b"),
-    stadtteil = str_remove(plz_stadtteil, "\\b\\d{4,5}\\b\\s*")
+    stadtteil_webseite = str_remove(plz_stadtteil, "\\b\\d{4,5}\\b\\s*")
   ) %>%
   
   select(-plz_stadtteil) %>%
@@ -137,6 +137,9 @@ Analysedaten_neu <- Rohdaten_neu_gefiltert %>%
   
   select(-kostenfeld) %>%
   
+  mutate(angaben_zum_objekt = str_remove(angaben_zum_objekt, 
+                                         fixed("Ab dem 1. Mai 2014 ist die neue Energieeinsparverordnung (EnEV 2014) rechtswirksam. Immobilieninserate müssen seitdem zusätzliche Angaben zu energetischen Eigenschaften enthalten. Liegt noch kein Energieausweis vor, entfällt die Pflicht. Für denkmalgeschützte Häuser und Gebäude mit weniger als 50 Quadratmetern Nutzfläche ist kein Energieausweis nötig.")
+  )) %>%
   mutate(angaben_zum_objekt = angaben_zum_objekt %>%
            stri_replace_all_regex("\\p{Z}+", " ") %>%     
            stri_replace_all_regex("[\\p{C}&&[^\\r\\n\\t]]", "") %>% 
@@ -148,11 +151,12 @@ Analysedaten_neu <- Rohdaten_neu_gefiltert %>%
          freitext_sonstiges = str_squish(str_replace_all(freitext_sonstiges, "\\s+", " "))) %>%
   
   
-  select(land, stadt, titel, link, stadtteil, postleitzahl, straße, gesamtmiete, 
-         kaltmiete, nebenkosten, kaution, sonstige_kosten, ablösevereinbarung, 
-         zimmergröße, personenzahl, wohnungsgröße, bewohneralter, einzugsdatum, 
-         zusammensetzung, befristung_enddatum, befristungsdauer, geschlecht_ges, 
-         alter_ges, wg_art, rauchen, sprache, angaben_zum_objekt, freitext_zimmer, 
+  select(land, bundesland, stadt, titel, link, profil, stadtteil_webseite, 
+         postleitzahl, straße, gesamtmiete, kaltmiete, nebenkosten, kaution, 
+         sonstige_kosten, ablösevereinbarung, zimmergröße, personenzahl, 
+         wohnungsgröße, bewohneralter, einzugsdatum, zusammensetzung, 
+         befristung_enddatum, befristungsdauer, geschlecht_ges, alter_ges, 
+         wg_art, rauchen, sprache, angaben_zum_objekt, freitext_zimmer, 
          freitext_lage, freitext_wg_leben, freitext_sonstiges, seite_scraping,
          uhrzeit_scraping, datum_scraping)
 
@@ -170,7 +174,7 @@ flog.info("Bearbeitung der Sting-Variablen erfolgreich")
 ################################################################################
 
 
-## Geocoding durchführen -------------------------------------------------------
+## Geodaten laden --------------------------------------------------------------
 
 Geodaten_Stadtteile <- st_read(paste0("C:\\Users\\Fabian Hellmold\\Desktop\\WG-Gesucht-Scraper\\",stadt,"\\Daten\\Geodaten\\Geo_Stadtteile_",stadt,".shp"))
 
@@ -178,15 +182,12 @@ St_Teile <- tibble(Geodaten_Stadtteile) %>%
   select(stadtteil) %>%
   pull()
 
-Geocoding_Stadtteile <- Analysedaten_neu %>%
-  filter(!(stadtteil %in% St_Teile))
-
 
 ## Geocoding durchführen -------------------------------------------------------
 
 tryCatch({
   
-  Analysedaten_neu_geo <- Analysedaten_neu %>%
+  Analysedaten_geocoding <- Analysedaten_neu %>%
     geocode(method = "osm", country = land, city = stadt,
             postalcode = postleitzahl, street = straße) %>%
     st_as_sf(coords = c("long", "lat"), crs = 4326, na.fail = FALSE) %>%
@@ -194,40 +195,26 @@ tryCatch({
     rename(geolocation = geometry)
   
 }, error = function(e) {
-  flog.error("Fehler beim Geocoding: %s", e$message)   
+  flog.error("Fehler beim Geocoding: %s", e$message)
 })
 
 
 
 # Stadtteile über Geocoding hinzufügen -----------------------------------------
 
-Geocoding_Stadtteile <- Analysedaten_neu_geo %>%
-  filter(!(stadtteil %in% St_Teile))
-
-if (nrow(Geocoding_Stadtteile) > 0) {
-  
-  Geocoding_Stadtteile <- Geocoding_Stadtteile %>%
-    select(-stadtteil) %>%
-    st_join(Geodaten_Stadtteile) %>%
-    mutate(stadtteil_quelle = case_when(!is.na(stadtteil) ~ "Geocode_OSM")) 
-  
-  flog.info("%d Stadtteil(e) über Geocoding ermittelt",
-            nrow(Geocoding_Stadtteile %>% filter(!is.na(stadtteil))))
-  flog.info("%d Anzeige(n) ohne gültige Stadtteilangabe",
-            nrow(Geocoding_Stadtteile %>% filter(is.na(stadtteil))))
-  
-} else {
-  flog.info("Stadtteildaten vollständig: Kein Geocoding")
-}
+Analysedaten_neu_geo <- Analysedaten_geocoding %>%
+  st_join(Geodaten_Stadtteile) %>%
+  mutate(stadtteil_geocoding = stadtteil, .after = stadtteil_webseite) %>%
+  select(-stadtteil) %>%
+  mutate(geolocation_wkt = st_as_text(geolocation)) %>%
+  st_drop_geometry() %>%
+  rename(geolocation = geolocation_wkt)
 
 
-## Datensätze wieder verbinden -------------------------------------------------
-
-
-Analysedaten_neu_geo <- Analysedaten_neu_geo %>%
-  filter(stadtteil %in% St_Teile) %>%
-  mutate(stadtteil_quelle = "WG_Gesucht", .before = stadtteil) %>%
-  rbind(Geocoding_Stadtteile)
+flog.info("%d Stadtteil(e) über Geocoding ermittelt",
+          nrow(Analysedaten_neu_geo %>% filter(!is.na(stadtteil_geocoding))))
+flog.info("%d Anzeige(n) ohne gültige Stadtteilangabe",
+          nrow(Analysedaten_neu_geo %>% filter(is.na(stadtteil_geocoding))))
 
 
 flog.info("== ENDE DATENARBEIT ===========================")

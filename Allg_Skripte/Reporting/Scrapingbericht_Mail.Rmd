@@ -19,16 +19,6 @@ library(DBI)
 library(futile.logger)
 library(glue)
 
-alle_staedte <- c("Wien", "München", "Berlin", "Hannover", "Kassel", "Hamburg", 
-                  "Leipzig", "Bremen", "Kiel", "Erfurt", "Rostock", "Zürich")
-
-
-```
-
-
-
-```{r daten_anzeigen}
-
 
 tryCatch({
   
@@ -46,14 +36,31 @@ tryCatch({
   
 })
 
-sql <- glue_sql("
-  SELECT *
+sql__staedte <- glue_sql("
+  SELECT stadt
+  FROM analysedaten
+", .con = con)
+
+alle_staedte <- dbGetQuery(con, sql__staedte) %>%
+  distinct() %>%
+  pull()
+
+
+```
+
+
+
+```{r daten_anzeigen}
+
+
+sql_daten <- glue_sql("
+  SELECT stadt, datum_scraping
   FROM analysedaten
   WHERE CAST(datum_scraping AS date) = CAST(GETDATE() AS date)
      OR CAST(datum_scraping AS date) = CAST(DATEADD(day, -7, GETDATE()) AS date)
 ", .con = con)
 
-Daten_ges <- dbGetQuery(con, sql)
+Daten_ges <- dbGetQuery(con, sql_daten)
 
 
 Wochenreferenz <- Daten_ges %>%
@@ -66,8 +73,9 @@ Wochenreferenz <- Daten_ges %>%
   mutate(datum_scraping = ifelse(datum_scraping == Sys.Date(), "heute", "vor_7_tagen")) %>%
   pivot_wider(names_from = datum_scraping, values_from = Anzahl,
               values_fill = 0) %>%
-  mutate(veraenderung = ifelse(vor_7_tagen == 0, NA, (heute - vor_7_tagen) / vor_7_tagen * 100))
-
+  mutate(veraenderung = (heute - vor_7_tagen) / vor_7_tagen * 100) %>%
+  mutate(veraenderung = (heute - vor_7_tagen) / vor_7_tagen * 100,
+         veraenderung = ifelse(veraenderung > 100, 100, veraenderung))
 
 ```
 
@@ -123,11 +131,12 @@ extract_log_loops <- function(log_path) {
 
 logs_heute <- alle_staedte %>%
   map(function(stadt) {
-    list.files(
+    alle_logs <- list.files(
       path = file.path("C:/Users/Fabian Hellmold/Desktop/WG-Gesucht-Scraper", stadt, "Logs"),
-      pattern = paste0("Log_", stadt, " ", format(Sys.Date(), "%d.%m.%Y"), " \\{\\d+\\}\\.txt"),
+      pattern = paste0(" ", format(Sys.Date(), "%d.%m.%Y"), " \\{\\d+\\}\\.txt$"),
       full.names = TRUE
     )
+    alle_logs[basename(alle_logs) %>% startsWith(paste0("Log_", stadt, " "))]
   }) %>%
   unlist()
 
@@ -167,7 +176,7 @@ log_daten_gesamt <- map_dfr(logs_heute, extract_log_loops) %>%
 
 
 
-```{r abbildung, include=TRUE, fig.height=7, fig.width=4.5}
+```{r abbildung, include=TRUE, fig.height=12, fig.width=5}
 
 
 Abb1 <- log_daten_gesamt %>%
@@ -180,7 +189,7 @@ Abb1 <- log_daten_gesamt %>%
   geom_text(aes(label = count), color = "black", size = 2.5) +
   scale_fill_manual(values = c("0" = "#84b884", "1" = "#f1a765",
                                "2" = "#d97c7c", "3" = "#cfcfcf")) +
-  facet_wrap(~ Stadt, ncol = 1, strip.position = "left") +
+  facet_grid(Stadt ~ ., switch = "y") + 
   labs(x = NULL, y = NULL, fill = NULL) +
   theme_minimal() +
   theme(
@@ -188,27 +197,49 @@ Abb1 <- log_daten_gesamt %>%
     axis.ticks = element_blank(),
     panel.grid = element_blank(),
     strip.background = element_blank(),
-    strip.text = element_text(size = 8, face = "bold")
+    strip.text.y.left = element_text(size = 8, angle = 0, face = "bold", hjust = 1)
   )
 
 
-Abb2 <- ggplot(Wochenreferenz, aes(y = stadt, x = veraenderung)) +
-  geom_linerange(aes(xmin = 0, xmax = veraenderung, color = veraenderung > 0),
-                 linewidth = 7.5) +
+Wochenreferenz <- Daten_ges %>%
+  mutate(datum_scraping = as.Date(datum_scraping)) %>%
+  group_by(stadt, datum_scraping) %>%
+  summarise(Anzahl = n(), .groups = "drop") %>%
+  complete(stadt = alle_staedte,
+           datum_scraping = c(Sys.Date(), Sys.Date() - 7),
+           fill = list(Anzahl = 0)) %>%
+  mutate(datum_scraping = ifelse(datum_scraping == Sys.Date(), "heute", "vor_7_tagen")) %>%
+  pivot_wider(names_from = datum_scraping, values_from = Anzahl,
+              values_fill = 0) %>%
+  mutate(veraenderung = (heute - vor_7_tagen) / vor_7_tagen * 100) %>%
+  mutate(veraenderung_aufb = ifelse(veraenderung > 100, 100, veraenderung),
+         veraenderung_aufb = ifelse(is.na(veraenderung_aufb), 0, veraenderung_aufb)) 
+
+
+Abb2 <- ggplot(Wochenreferenz, aes(y = stadt, x = veraenderung_aufb)) +
+  geom_linerange(aes(xmin = 0, xmax = veraenderung_aufb, 
+                     color = veraenderung_aufb > 0), linewidth = 7.5) +
+  geom_segment(data = subset(Wochenreferenz, veraenderung >= 100),
+               aes(x = 80, xend = 100, y = stadt, yend = stadt),
+               color = "#3E6B89", linewidth = 7.5) +
+  geom_text(data = subset(Wochenreferenz, veraenderung >= 100),
+            aes(x = 90, y = stadt, label = "+"),
+            color = "#5CA4C4", size = 4, fontface = "bold") +
   geom_richtext(aes(x = 140, label = paste0(vor_7_tagen, " / ", heute)), 
-                size = 3, color = "gray20", fill = "#f8f5f2", fontface = "bold") +
+                size = 3, color = "gray20", fill = "#F6F3EE", fontface = "bold") +
   geom_vline(xintercept = 0, linetype = "dashed", color = "gray40") +
   facet_wrap(~stadt, ncol = 1, scales = "free_y") +
   scale_x_continuous(limits = c(-110, 160),
                      breaks = seq(-100, 100, 50),
                      labels = function(x) paste0(x, "%")) +
-  scale_color_manual(values = c("TRUE" = "steelblue", "FALSE" = "tomato")) +
+  scale_color_manual(values = c("TRUE" = "#5CA4C4", "FALSE" = "#E58E89")) +
   theme_minimal() +
   theme(
     legend.position = "none",
     strip.text = element_blank(),
     axis.text.y = element_blank(),
-    axis.ticks.y = element_blank()
+    axis.ticks.y = element_blank(),
+    axis.text.x = element_text(margin = margin(t=5))
   ) +
   labs(x = NULL, y = NULL, color = NULL)
 

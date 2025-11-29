@@ -83,6 +83,14 @@ Fun_Subdata = function(Link_Subdata) {
   
   WG_Angebot <- read_html(GET(Link_Subdata, proxy_obj, ua_obj))
   
+  Sys.sleep(runif(1, min = 0.5, max = 1.5))
+  
+  profil <- WG_Angebot %>%
+    html_node("p.text-dark-gray.text-bold.mb0") %>%
+    html_text(trim = TRUE)
+  
+  Sys.sleep(runif(1, min = 0.5, max = 1.5))
+  
   titel <- WG_Angebot %>%
     html_element("h1.detailed-view-title span:last-child") %>%
     html_text(trim = TRUE)
@@ -161,7 +169,7 @@ Fun_Subdata = function(Link_Subdata) {
     html_text(trim = TRUE) %>%
     paste(collapse = "|")
   
-  return(c(titel, wg_konstellation, zimmergröße_gesamtmiete, adresse, datum,
+  return(c(profil, titel, wg_konstellation, zimmergröße_gesamtmiete, adresse, datum,
            wg_details, kostenfeld, angaben_zum_objekt, freitext_zimmer,
            freitext_lage, freitext_wg_leben, freitext_sonstiges))
 }
@@ -231,19 +239,21 @@ scrape_retries <- function(Seite, max_versuche = Wiederholungen) {
       neue_daten <- tibble(
         land = land,
         stadt = stadt,
+        bundesland = bundesland,
         link = as.vector(Sublinks),
-        titel = WG_Subdaten[1,], 
-        wg_konstellation = WG_Subdaten[2,],
-        zimmergröße_gesamtmiete = WG_Subdaten[3,], 
-        adresse = WG_Subdaten[4,], 
-        datum = WG_Subdaten[5,], 
-        wg_details = WG_Subdaten[6,],
-        kostenfeld = WG_Subdaten[7,],
-        angaben_zum_objekt = WG_Subdaten[8,],
-        freitext_zimmer = WG_Subdaten[9,],
-        freitext_lage = WG_Subdaten[10,],
-        freitext_wg_leben = WG_Subdaten[11,],
-        freitext_sonstiges = WG_Subdaten[12,],
+        profil = WG_Subdaten[1,],
+        titel = WG_Subdaten[2,], 
+        wg_konstellation = WG_Subdaten[3,],
+        zimmergröße_gesamtmiete = WG_Subdaten[4,], 
+        adresse = WG_Subdaten[5,], 
+        datum = WG_Subdaten[6,], 
+        wg_details = WG_Subdaten[7,],
+        kostenfeld = WG_Subdaten[8,],
+        angaben_zum_objekt = WG_Subdaten[9,],
+        freitext_zimmer = WG_Subdaten[10,],
+        freitext_lage = WG_Subdaten[11,],
+        freitext_wg_leben = WG_Subdaten[12,],
+        freitext_sonstiges = WG_Subdaten[13,],
         seite_scraping = Seite + 1,
         uhrzeit_scraping = uhrzeit_scraping,
         datum_scraping = Sys.Date()

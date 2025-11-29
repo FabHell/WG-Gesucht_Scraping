@@ -20,6 +20,8 @@
 
 land <- "Deutschland"
 
+bundesland <- "Hamburg"
+
 stadt <- "Hamburg"
 
 Link_Stadt <- "https://www.wg-gesucht.de/wg-zimmer-in-Hamburg.55.0.1."

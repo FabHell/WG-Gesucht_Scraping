@@ -16,7 +16,7 @@ library(glue)
 library(DBI)
 library(sf)
 
-stadt <- "Bremen"
+stadt <- "Magdeburg"
 
 ```
 
@@ -282,7 +282,7 @@ Abb_2 <- log_daten_gesamt_stadt %>%
 Abb_3 <- log_daten_gesamt_stadt %>%
   mutate(
     Datum = as.Date(Datum, format = "%d.%m.%Y"),
-    Wochentag = format(Datum, "%d. %B / %a"),
+    Wochentag = format(Datum, "%d. %b / %a"),
     Wochentag = factor(Wochentag, levels = sort(unique(Wochentag))),
     Loopzeit = factor(Uhrzeit, levels = sort(unique(Uhrzeit)))  
   ) %>%
@@ -320,7 +320,7 @@ Abb_1 + Abb_2 + Abb_3 +
 ## Geografische Verteilung
 
 -  Insgesamt wurden diese Woche neue Angebote für [**`r nrow(Geodaten_Stadtteile %>% right_join(Daten_ges, by = "stadtteil") %>% filter(datum_scraping > Sys.Date()-7) %>% tibble %>%  select(stadtteil) %>% distinct())`**]{style="color: #b9a8d1;"} der [**`r nrow(Geodaten_Stadtteile)`**]{style="color: grey;"} Stadtteile erfasst.
--  Die Lage der Wohnung wurde für [**`r nrow(Daten_ges %>% filter(datum_scraping > Sys.Date()-7 & stadtteil_quelle == "Geocode_OSM"))`**]{style="color: #8d75aa;"} Angebote mittels Geocoding ermittelt.
+-  Die Lage der Wohnung wurde für [**`r round(((nrow(Daten_ges %>% filter(datum_scraping > Sys.Date()-7 & stadtteil_quelle == "Geocode_OSM")) / nrow(Daten_ges))*100),1)`%**]{style="color: #8d75aa;"} der Angebote mittels Geocoding ermittelt.
 -  Für [**`r nrow(Daten_ges %>% filter(datum_scraping > Sys.Date()-7) %>% filter(is.na(stadtteil)))`**]{style="color: black;"} der  [**`r nrow(Daten_ges %>% filter(datum_scraping > Sys.Date()-7))`**]{style="color: black;"} gescrapten Angebote konnte kein Stadtteil ermittelt werden.
 
 

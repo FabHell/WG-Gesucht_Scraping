@@ -17,7 +17,7 @@ library(DBI)
 library(futile.logger)
 library(glue)
 
-stadt <- "Berlin"
+stadt <- "Trier"
 
 ```
 
@@ -59,8 +59,8 @@ Daten_ges <- dbGetQuery(con, sql)
 extract_log_loops <- function(log_path) {
   lines <- readLines(log_path, encoding = "UTF-8")
   
-  stadt <- str_match(log_path, "Log_([^ ]+) ")[,2]
-  
+  stadt <- str_match(basename(log_path), "Log_(.+?) \\d{2}\\.\\d{2}\\.\\d{4}")[,2] %>% str_trim()
+
   file_info <- str_match(basename(log_path), "(\\d{2}\\.\\d{2}\\.\\d{4}) \\{(\\d{1,2})\\}\\.txt")
   datum <- dmy(file_info[2])
   uhrzeit <- sprintf("%02d:00", as.integer(file_info[3]))
@@ -106,14 +106,19 @@ log_pfade_stadt <- c(
   glue("C:/Users/Fabian Hellmold/Desktop/WG-Gesucht-Scraper/{stadt}/Logs")
 )
 
-logs_heute_stadt <- map(log_pfade_stadt, function(pfad) {
-  list.files(
-    path = pfad,
-    pattern = paste0("Log_\\w+ ", format(Sys.Date(), "%d.%m.%Y"), " \\{\\d+\\}\\.txt"),
-    full.names = TRUE
-  )
-}) %>% unlist()
 
+logs_heute_stadt <- map(log_pfade_stadt, function(pfad) {
+  if (!dir.exists(pfad)) {
+    warning("Pfad existiert nicht: ", pfad); return(character(0))
+  }
+  files <- list.files(path = pfad, pattern = "^Log_.*\\.txt$", full.names = TRUE)
+  
+  if (length(files) == 0) return(character(0))
+
+    date_str <- format(Sys.Date(), "%d.%m.%Y")
+  files_today <- files[grepl(date_str, basename(files), fixed = TRUE)]
+  files_today
+}) %>% unlist()
 
 
 log_daten_gesamt_stadt <- map_dfr(logs_heute_stadt, extract_log_loops) %>%
