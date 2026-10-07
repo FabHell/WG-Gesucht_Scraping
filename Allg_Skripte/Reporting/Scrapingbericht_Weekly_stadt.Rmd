@@ -16,7 +16,7 @@ library(glue)
 library(DBI)
 library(sf)
 
-stadt <- "Magdeburg"
+stadt <- "Wien"
 
 ```
 
@@ -319,16 +319,19 @@ Abb_1 + Abb_2 + Abb_3 +
 
 ## Geografische Verteilung
 
--  Insgesamt wurden diese Woche neue Angebote für [**`r nrow(Geodaten_Stadtteile %>% right_join(Daten_ges, by = "stadtteil") %>% filter(datum_scraping > Sys.Date()-7) %>% tibble %>%  select(stadtteil) %>% distinct())`**]{style="color: #b9a8d1;"} der [**`r nrow(Geodaten_Stadtteile)`**]{style="color: grey;"} Stadtteile erfasst.
--  Die Lage der Wohnung wurde für [**`r round(((nrow(Daten_ges %>% filter(datum_scraping > Sys.Date()-7 & stadtteil_quelle == "Geocode_OSM")) / nrow(Daten_ges))*100),1)`%**]{style="color: #8d75aa;"} der Angebote mittels Geocoding ermittelt.
--  Für [**`r nrow(Daten_ges %>% filter(datum_scraping > Sys.Date()-7) %>% filter(is.na(stadtteil)))`**]{style="color: black;"} der  [**`r nrow(Daten_ges %>% filter(datum_scraping > Sys.Date()-7))`**]{style="color: black;"} gescrapten Angebote konnte kein Stadtteil ermittelt werden.
 
 
 ```{r plot3, include=TRUE, fig.height=3.5, fig.width=7}
 
+# -  Insgesamt wurden diese Woche neue Angebote für [**`r nrow(Geodaten_Stadtteile %>% right_join(Daten_ges, by = "stadtteil") %>% filter(datum_scraping > Sys.Date()-7) %>% tibble %>%  select(stadtteil) %>% distinct())`**]{style="color: #b9a8d1;"} der [**`r nrow(Geodaten_Stadtteile)`**]{style="color: grey;"} Stadtteile erfasst.
+# -  Die Lage der Wohnung wurde für [**`r round(((nrow(Daten_ges %>% filter(datum_scraping > Sys.Date()-7 & stadtteil_quelle == "Geocode_OSM")) / nrow(Daten_ges))*100),1)`%**]{style="color: #8d75aa;"} der Angebote mittels Geocoding ermittelt.
+# -  Für [**`r nrow(Daten_ges %>% filter(datum_scraping > Sys.Date()-7) %>% filter(is.na(stadtteil)))`**]{style="color: black;"} der  [**`r nrow(Daten_ges %>% filter(datum_scraping > Sys.Date()-7))`**]{style="color: black;"} gescrapten Angebote konnte kein Stadtteil ermittelt werden.
+
+
 
 Karte_1 <- Geodaten_Stadtteile %>%
-  right_join(Daten_ges, by = "stadtteil") %>%
+  rename(stadtteil_geocoding = stadtteil) %>%
+  right_join(Daten_ges, by = "stadtteil_geocoding") %>%
   filter(datum_scraping > Sys.Date()-7) %>%
   
   ggplot() +
@@ -337,9 +340,9 @@ Karte_1 <- Geodaten_Stadtteile %>%
   theme_void()
 
 Karte_2 <- Geodaten_Stadtteile %>%
-  right_join(Daten_ges, by = "stadtteil") %>%
-  filter(datum_scraping > Sys.Date()-7 &
-         stadtteil_quelle == "Geocode_OSM") %>%
+  rename(stadtteil_geocoding = stadtteil) %>%
+  right_join(Daten_ges, by = "stadtteil_geocoding") %>%
+  filter(datum_scraping > Sys.Date()-7) %>%
   
   ggplot() +
   geom_sf(data = Geodaten_Stadtteile, fill = "gray" ,color = "transparent") +

@@ -17,7 +17,7 @@ library(DBI)
 library(futile.logger)
 library(glue)
 
-stadt <- "Trier"
+stadt <- "Münster"
 
 ```
 

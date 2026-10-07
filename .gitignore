@@ -109,9 +109,19 @@ Graz/
 Flensburg/
 Augsburg/
 Nürnberg/
+Cottbus/
+Weimar/
+Marburg/
+Gießen/
+Wiesbaden/
 Hamburg/Logs/
 Hamburg/Daten/
 Allg_Reporting/
 
 *.Rproj
 *.html
+Allg_Proxies/
+Allg_Skripte/Auftakt_geolocation.R
+Allg_Skripte/Backup_komplett.R
+Allg_Skripte/Reset_SQL_Datenbank.R
+.positai

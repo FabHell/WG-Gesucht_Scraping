@@ -11,6 +11,7 @@
 
 
 library(tidyverse)
+library(glue)
 library(futile.logger)
 library(rvest)
 library(httr)
@@ -50,16 +51,23 @@ flog.info("")
 ################################################################################
 
 
-## Vektor für Selektionslinks nicht älter als 60 Tage erstellen
+con_pg <- dbConnect(RPostgres::Postgres(),
+                    host     = Sys.getenv("SERVER_PG_LOKAL"),
+                    port     = as.integer(Sys.getenv("PORT_PG_LOKAL")),
+                    dbname   = Sys.getenv("DATABASE_PG_LOKAL"),
+                    user     = Sys.getenv("UID_PG_LOKAL"),
+                    password = Sys.getenv("PWD_PG_LOKAL"))
 
-Selektionslinks <- read_csv(paste0("C:\\Users\\Fabian Hellmold\\Desktop\\WG-Gesucht-Scraper\\",stadt,"\\Daten\\Analysedaten\\Analysedaten.csv"), 
-                            col_select = c("link", "datum_scraping"),
-                            show_col_types = FALSE) %>%
-  
-  bind_rows() %>%
-  filter(datum_scraping > Sys.Date() - 60) %>%
-  select(-datum_scraping) %>%
+sql <- glue_sql("
+  SELECT link
+  FROM analysedaten_wgs
+  WHERE stadt = {stadt}
+    AND datum_scraping >= CURRENT_DATE - INTERVAL '60 days'
+", .con = con_pg)
+
+Selektionslinks <- dbGetQuery(con_pg, sql) %>%
   pull()
+
 
 
 

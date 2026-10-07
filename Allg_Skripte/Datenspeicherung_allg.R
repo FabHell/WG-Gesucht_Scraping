@@ -72,7 +72,54 @@ flog.info("Speichern der Analysedaten erfolgreich")
 
 ################################################################################
 #####                                                                      #####
-#####                            SQL-SERVER LOKAL                          #####
+#####                            PG-SQL-SERVER LOKAL                       #####
+#####                                                                      #####
+################################################################################
+
+
+# usethis::edit_r_environ()
+
+
+tryCatch({
+  
+  con_pg <- dbConnect(RPostgres::Postgres(),
+                      host     = Sys.getenv("SERVER_PG_LOKAL"),
+                      port     = as.integer(Sys.getenv("PORT_PG_LOKAL")),
+                      dbname   = Sys.getenv("DATABASE_PG_LOKAL"),
+                      user     = Sys.getenv("UID_PG_LOKAL"),
+                      password = Sys.getenv("PWD_PG_LOKAL"))
+  
+  flog.info("PostgreSQL-Verbindung hergestellt")
+  
+}, error = function(e) {
+  flog.error("Fehler bei PostgreSQL-Verbindung: %s", e$message)
+})
+
+
+Analysedaten_clean_pg <- Analysedaten_neu_geo %>%
+  mutate(across(where(is.character), ~ str_remove_all(., "\\u0000")))
+
+
+tryCatch({
+  
+  st_write(Analysedaten_clean_pg, con_pg, "analysedaten_wgs", append = TRUE)
+  
+  flog.info("%d Anzeigen in PG-SQL gespeichert", nrow(Analysedaten_clean_pg))
+  
+}, error = function(e) {
+  
+  flog.error("Fehler beim Speichern in PG-SQL: %s", e$message)
+  
+})
+
+dbDisconnect(con_pg)
+
+
+
+
+################################################################################
+#####                                                                      #####
+#####                           MS-SQL-SERVER LOKAL                        #####
 #####                                                                      #####
 ################################################################################
 
@@ -157,9 +204,10 @@ tryCatch({
 
 })
 
-
-
 dbDisconnect(con)
+
+
+
 
 flog.info("== ENDE DATENSPEICHERUNG ======================")
 flog.info("")
